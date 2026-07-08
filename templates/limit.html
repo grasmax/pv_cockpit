@@ -1,0 +1,652 @@
+<html>
+<head>
+    <title>Inverter-Limits setzen</title>
+    <link rel="icon" href="favicon.png" type="image/png">
+
+    <style>
+        #title_bk {
+            background-color: #5690bb;
+        }
+        #title {
+            color: white;
+            margin-left: 25px;
+            text-align: left;
+            font-size: 20pt;
+            font-family: Calibri;
+        }
+        #title2 {
+            color: #5690bb;
+            padding: 5px;
+            text-align: left;
+            font-size: 12pt;
+            font-family: Calibri;
+            font-weight: bold;
+/*            width: 500px;
+*/        }
+
+        td {
+            color: blue;
+            font-size: 12pt;
+            font-family: Calibri;
+        }
+
+        #btnLimit {
+            color: blue;
+            font-size: 11pt;
+            font-family: Calibri;
+            background-color: rgb(233,233,233);
+            border-radius: 4px;
+            width: 70px;
+        }
+        button {
+            color: blue;
+            font-size: 11pt;
+            font-family: Calibri;
+            background-color: rgb(233,233,233);
+            border-radius: 4px;
+        }
+
+        #btnCopy {
+            padding: 0;
+            border: none;
+            background: none;
+        }
+        #btnDelete {
+            padding: 0;
+            border: none;
+            background: none;
+        }
+
+        #RvWert {
+            background-color: black;
+            color: rgb(85,255,85);
+            width: 240px;
+            height: 200px;
+            word-wrap: break-word;
+        }
+
+        .divider {
+            width: 1px;
+            background-color: #0000ff;
+            min-height: 400px;
+        }
+        .thema {
+            color: grey;
+            font-size: 12pt;
+            font-family: Calibri;
+        }
+        .alarm-banner {
+            background-color: #ff0000;
+            color: #ffffff;
+            text-align: left;
+            padding: 10px;
+            font-size: 12pt;
+            font-family: Calibri;
+            font-weight: bold;
+            border-radius: 4px;
+            width: 600px;
+        }
+    </style>
+
+    <script type="text/javascript">
+
+        function sGetPara(InputId) {
+            //return '"' + document.getElementById(InputId).value + '"';
+            return document.getElementById(InputId).value;
+        }
+
+        function Scroll() {
+            rvWert = document.getElementById('RvWert');
+
+            //funktioniert, habe aber keine Schleife hinbekommen:
+            //Scroll wird nur einmal aufgerufen und kommt nicht am clearInterval() vorbei
+            //rvWert.scrollTop += 100;
+            //rvWert.scrollBy(0,300);
+
+            if (rvWert.scrollTop == rvWert.scrollHeight) {
+                alert("clear");
+                clearInterval(this);
+            }
+
+            //deshalb einfach ans Ende scrollen:
+            rvWert.scrollTo(0, rvWert.scrollHeight); //wirkt nicht zusammen mit xy: , "smooth");
+
+        }
+
+        function SetzeLimitIntern(Limit) {
+            try {
+
+                sReq = "http://192.168.2.28/soda/setlimits/" + Limit;
+
+                
+                fetch(sReq)
+                    .then(response => {
+                        if (response.ok) {
+                            return response.json(); // Parse the response data as JSON
+                        } else {
+                            throw new Error('Fehler in fetch(' + sReq + ')');
+                        }
+                    })
+                    .then(data => {
+                        if (data.rv != "okok") {
+                            console.error(data.text);
+                            errTitle = document.getElementById('RvText');
+                            errTitle.innerText = "Fehler:";
+                            errTitle.style.color = 'red';
+                            errText = document.getElementById('RvWert');
+                            errText.innerHTML = data.text;
+                            errText.style.color = 'red';
+                        }
+                        else {
+                            rvWert = document.getElementById('RvWert');
+                            rvWert.value = data.text;
+                            var myTimer = setInterval(Scroll(), 500);
+                        }
+                    })
+                    .catch(error => {
+                        console.error(error);
+                        errTitle = document.getElementById('RvText');
+                        errTitle.innerText = "Ausnahme:";
+                        errTitle.style.color = 'red';
+                        errText = document.getElementById('RvWert');
+                        errText.innerHTML = error;
+                        errText.style.color = 'red';
+                    });
+
+            }
+            catch (e2) {
+                console.error(e2);
+                document.getElementById('RvText').innerText = "Ausnahme2:";
+                document.getElementById('RvWert').innerHTML = e2;
+            }
+        }
+
+        function SetzeLimit(Limit) {
+            try {
+                //fkt nicht: document.body.style.cursor = 'progress';
+                //fkt. leider nur beim ersten Mal: 
+                document.getElementById('RvWert').innerHTML = "Warte...";
+                
+                SetzeLimitIntern(Limit)
+                //fkt nicht: document.body.style.cursor = "default";
+            }
+            catch (e) {
+                console.error(e);
+                document.getElementById('RvText').innerText = "Ausnahme3:";
+                document.getElementById('RvWert').innerHTML = e;
+            }
+        }
+
+
+        function HoleLimitsIntern() {
+            try {
+
+                sReq = "http://192.168.2.28/soda/getlimits";
+                
+                fetch(sReq)
+                    .then(response => {
+                        if (response.ok) {
+                            return response.json(); // Parse the response data as JSON
+                        } else {
+                            throw new Error('Fehler in fetch(' + sReq + ')');
+                        }
+                    })
+                    .then(data => {
+                        if (data.rv != "okok") {
+                            console.error(data.text);
+                            errTitle = document.getElementById('RvText');
+                            errTitle.innerText = "Fehler:";
+                            errTitle.style.color = 'red';
+                            errText = document.getElementById('RvWert');
+                            errText.innerHTML = data.text;
+                            errText.style.color = 'red';
+                        }
+                        else {
+                            rvWert = document.getElementById('RvWert');
+                            rvWert.value = data.text;
+                            var myTimer = setInterval(Scroll(), 500);
+                        }
+                    })
+                    .catch(error => {
+                        console.error(error);
+                        errTitle = document.getElementById('RvText');
+                        errTitle.innerText = "Ausnahme:";
+                        errTitle.style.color = 'red';
+                        errText = document.getElementById('RvWert');
+                        errText.innerHTML = error;
+                        errText.style.color = 'red';
+                    });
+
+            }
+            catch (e2) {
+                console.error(e2);
+                document.getElementById('RvText').innerText = "Ausnahme2:";
+                document.getElementById('RvWert').innerHTML = e2;
+            }
+        }
+
+        function HoleShellyPro3StatusIntern() {
+            try {
+
+                sReq = "http://192.168.2.28/soda/HoleShellyPro3Status";
+                
+                fetch(sReq)
+                    .then(response => {
+                        if (response.ok) {
+                            return response.json(); // Parse the response data as JSON
+                        } else {
+                            throw new Error('Fehler in fetch(' + sReq + ')');
+                        }
+                    })
+                    .then(data => {
+                        if (data.rv != "okok") {
+                            console.error(data.text);
+                            errTitle = document.getElementById('RvText');
+                            errTitle.innerText = "Fehler:";
+                            errTitle.style.color = 'red';
+                            errText = document.getElementById('RvWert');
+                            errText.innerHTML = data.text;
+                            errText.style.color = 'red';
+                        }
+                        else {
+                            rvWert = document.getElementById('RvWert');
+                            rvWert.value = data.text;
+                            var myTimer = setInterval(Scroll(), 500);
+                        }
+                    })
+                    .catch(error => {
+                        console.error(error);
+                        errTitle = document.getElementById('RvText');
+                        errTitle.innerText = "Ausnahme:";
+                        errTitle.style.color = 'red';
+                        errText = document.getElementById('RvWert');
+                        errText.innerHTML = error;
+                        errText.style.color = 'red';
+                    });
+
+            }
+            catch (e2) {
+                console.error(e2);
+                document.getElementById('RvText').innerText = "Ausnahme2:";
+                document.getElementById('RvWert').innerHTML = e2;
+            }
+        }
+
+
+
+        function HoleLimits() {
+            try {
+                document.getElementById('RvWert').innerHTML = "Warte auf Limits...";
+                
+                HoleLimitsIntern()
+            }
+            catch (e) {
+                console.error(e);
+                document.getElementById('RvText').innerText = "Ausnahme3:";
+                document.getElementById('RvWert').innerHTML = e;
+            }
+        }
+
+        function HoleShellyPro3Status() {
+            try {
+                document.getElementById('RvWert').innerHTML = "Warte auf Daten vom ShellyPro3...";
+                
+                HoleShellyPro3StatusIntern()
+            }
+            catch (e) {
+                console.error(e);
+                document.getElementById('RvText').innerText = "Ausnahme4:";
+                document.getElementById('RvWert').innerHTML = e;
+            }
+        }
+
+        function Text2ClipBoard() {
+            var copyText = document.getElementById("RvWert");
+            copyText.select();
+            //nötig für Mobiltelefone? copyText.setSelectionRange(0, 99999); 
+
+            //Juni 2024:writeText funktioniert nicht, execCommand ist deprecated, aber alternativlos
+            //navigator.clipboard.writeText(copyText.value);
+            document.execCommand("copy");
+
+            //keine Möglichkeit gefunden, die Selektion wieder zu löschen
+            btn = document.getElementById("btnProgn");
+            btn.focus();
+            //copyText.focus();
+        }
+
+        function DeleteSel() {
+            var copyText = document.getElementById("RvWert");
+
+            copyText.select();
+            document.execCommand("delete");
+        }
+
+
+        async function aktualisiereDaten() {
+            try {
+                const response = await fetch('/api/pv-daten');
+                const d = await response.json();
+
+                // Werte im HTML live ersetzen
+                document.getElementById('yield-act').innerText = d.YieldActW;
+                document.getElementById('yield-total').innerText = d.YieldTotal;
+                document.getElementById('progn-day').innerText = d.PrognDay;
+                document.getElementById('progn-remain').innerText = d.PrognDayRemain;
+
+                // KORRIGIERT: 'batt-soc' statt 'node-soc'
+                document.getElementById('batt-soc').innerText = d.BattSoc;
+                document.getElementById('batt-remain').innerText = d.BattRemainKwh;
+
+                document.getElementById('batt-inout-w-load').innerText = d.BattInOutWload;
+                document.getElementById('batt-inout-a-load').innerText = d.BattInOutAload;
+                document.getElementById('batt-inout-w-consum').innerText = d.BattInOutWconsum;
+                document.getElementById('batt-inout-a-consum').innerText = d.BattInOutAconsum;
+                document.getElementById('batt-v').innerText = d.BattV;
+
+                document.getElementById('consum-act').innerText = d.ShellyCurrentWatts;
+                document.getElementById('consum-total').innerText = d.ShellyTotalKwh;
+                
+                // Grenzwert-Logik für den Verbrauchsalarm (3500 Watt)
+                const alarmBanner = document.getElementById('alarm');
+                if (Number(d.ShellyCurrentWatts) > 3500) {
+                    alarmBanner.style.display = 'block';
+                } else {
+                    alarmBanner.style.display = 'none';
+                }
+
+            } catch (e) {
+                console.error("Verbindungsfehler zum FastAPI-Server:", e);
+            }
+        }
+
+        // Startet die Aktualisierung sofort beim Laden
+        aktualisiereDaten();
+
+        // AKTIVIERT: Wiederholt die Abfrage alle 3 Sekunden
+        setInterval(aktualisiereDaten, 3000);
+
+
+    </script>
+
+
+</head>
+
+
+<body>
+    <!--<div id="title_bk">
+        <div id="title2">Limits für die Hoymiles-Inverter setzen
+        </div>
+    </div>-->
+    <div id="title2">
+        Photovoltaik-Cockpit für Victron/Hoymiles/Pylontech/OpenDTU/RaspberryPi
+    </div>
+
+    <!-- Alarm-Anzeige (Wird per JS ein-/ausgeblendet) -->
+    <div id="alarm" class="alarm-banner">
+        ALARM! Verbrauch zu hoch!
+    </div>
+
+
+    <table>
+
+        <tr height="500">
+            <td valign="top">
+                <table width="300">
+                    <tr height="10">
+                        <td valign="top"></td>
+                        <td valign="top"></td>
+                        <td valign="top"></td>
+                    </tr>
+
+
+                    <tr>
+                        <td class="thema" valign="top" width="150">Sonne</td>
+                        <td valign="top">
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td valign="top" width="100">Aktuell:</td>
+                        <td valign="top">
+                            <span id="yield-act">{{YieldActW}}</span>
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td valign="top" width="100">Gesamt:</td>
+                        <td valign="top">
+                            <span id="yield-total">{{YieldTotal}}</span>
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+
+                    <tr height="10">
+                        <td valign="top"></td>
+                        <td valign="top"></td>
+                        <td valign="top"></td>
+                    </tr>
+
+                    <tr>
+                        <td class="thema" valign="top" width="100">Prognose</td>
+                        <td valign="top">
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td valign="top" width="100">Heute, gesamt:</td>
+                        <td valign="top">
+                            <span id="progn-day">{{PrognDay}}</span> kWh
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td valign="top" width="100">Heute, ab jetzt:</td>
+                        <td valign="top">
+                            <span id="progn-remain">{{PrognDayRemain}}</span> kWh
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+
+                    <tr height="10">
+                        <td valign="top"></td>
+                        <td valign="top"></td>
+                        <td valign="top"></td>
+                    </tr>
+
+
+
+                    <tr>
+                        <td class="thema" valign="top" width="100">Speicher</td>
+                        <td valign="top">
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td valign="top" width="100">SOC:</td>
+                        <td valign="top">
+                            <span id="batt-soc">{{BattSoc}}</span> % / <span id="batt-remain">{{BattRemainKwh}}</span> kWh
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td valign="top" width="100">Laden:</td>
+                        <td valign="top">
+                            <span id="batt-inout-w-load">{{BattInOutWload}}</span> W / <span id="batt-inout-a-load">{{BattInOutAload}}</span> A
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td valign="top" width="100">Verbrauchen:</td>
+                        <td valign="top">
+                            <span id="batt-inout-w-consum">{{BattInOutWconsum}}</span> W / <span id="batt-inout-a-consum">{{BattInOutAconsum}}</span> A
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td valign="top" width="100">Spannung:</td>
+                        <td valign="top">
+                            <span id="batt-v">{{BattV}}</span> V
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+
+                    <tr height="10">
+                        <td valign="top"></td>
+                        <td valign="top"></td>
+                        <td valign="top"></td>
+                    </tr>
+
+
+                    <tr>
+                        <td class="thema" valign="top" width="100">Verbrauch im Haus </td>
+                        <td valign="top">
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td valign="top" width="100">Aktuell:</td>
+                        <td valign="top">
+                            <span id="consum-act">{{ShellyCurrentWatts}}</span> W
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td valign="top" width="100">Gesamt: </td>
+                        <td valign="top">
+                            <span id="consum-total">{{ShellyTotalKwh}}</span> kWh
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+                    <tr height="10">
+                        <td valign="top"></td>
+                        <td valign="top"></td>
+                        <td valign="top"></td>
+                    </tr>
+
+
+                </table>
+            </td>
+
+            <td valign="top">
+                <!-- VERTIKALE TRENNLINIE -->
+                <div class="divider"></div>
+
+            </td>
+
+            <td valign="top">
+                <table>
+                    <tr height="10">
+                        <td valign="top"></td>
+                        <td valign="top"></td>
+                        <td valign="top"></td>
+                    </tr>
+
+                    <tr>
+                        <td valign="top" width="100"><a href="http://192.168.2.57/#/" target="_blank">ShellyPro3:</a></td>
+                        <td valign="top">
+                            <button class="button" onclick="HoleShellyPro3Status()">3-Kanal-Schalter prüfen</button>
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+                    <tr height="10">
+                        <td valign="top"></td>
+                        <td valign="top"></td>
+                        <td valign="top"></td>
+                    </tr>
+
+                    <tr>
+                        <td valign="top" width="100"><a href="http://192.168.2.39/" target="_blank">OpenDTU:</a></td>
+                        <td valign="top">
+                            <button class="button" onclick="HoleLimits()">Limits holen</button>
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+                    <tr height="10">
+                        <td valign="top"></td>
+                        <td valign="top"></td>
+                        <td valign="top"></td>
+                    </tr>
+
+                    <tr>
+                        <td valign="top" width="100">Neues Limit:</td>
+                        <td valign="top">
+                            <input name="limit" id="limit" value={{ limit }} maxlength="10" style="width: 50px;" />
+                            <button class="button" onclick="SetzeLimit(sGetPara('limit'))">Inverter-Limits einstellen</button>
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td valign="top"></td>
+                        <td valign="top">
+                            <button id="btnLimit" onclick="SetzeLimit(300)">300 W</button>
+                            <button id="btnLimit" onclick="SetzeLimit(400)">400 W</button>
+                            <button id="btnLimit" onclick="SetzeLimit(600)">600 W</button><br />
+                            <button id="btnLimit" onclick="SetzeLimit(800)">800 W</button>
+                            <button id="btnLimit" onclick="SetzeLimit(1000)">1000 W</button>
+                            <button id="btnLimit" onclick="SetzeLimit(1400)">1400 W</button>
+                        </td>
+                        <td valign="top"></td>
+                    </tr>
+
+                    <tr>
+                        <td valign="top">
+                            <div id="RvText"></div>
+                        </td>
+                        <td valign="top">
+                            <textarea name="RvWert" id="RvWert" type="text" rows="20" cols="70"></textarea>
+                        </td>
+                        <td valign="top">
+                            <button id="btnCopy" onclick="Text2ClipBoard()">
+                                <img src="{{ url_for('static', path='copy_icon.jpg') }}">
+                            </button>
+                            <br />
+                            <button id="btnDelete" onclick="DeleteSel()">
+                                <img src="{{ url_for('static', path='del_icon.jpg') }}">
+                            </button>
+                        </td>
+                    </tr>
+                </table>
+
+            </td>
+        </tr>
+
+    </table>
+
+
+</body>
+</html>

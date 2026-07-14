@@ -322,7 +322,8 @@
             document.execCommand("delete");
         }
 
-
+        const alarmSound = new Audio('/static/Stromfresseralarm.m4a');
+        
         async function aktualisiereDaten() {
             try {
                 const response = await fetch('/api/pv-daten');
@@ -330,6 +331,27 @@
 
                 // Werte im HTML live ersetzen
                 document.getElementById('yield-act').innerText = d.YieldActW;
+                if (d.WR1_Power > 0) {
+                    document.getElementById('yield-act1').innerText = `${d.WR1_Power}W / ${d.WR1_LimitAbs}W (${d.WR1_Temp}°C)`;
+                }
+                else {
+                    document.getElementById('yield-act1').innerText = `???`;
+                }
+
+                if (d.WR2_Power > 0) {
+                    document.getElementById('yield-act2').innerText = `${d.WR2_Power}W / ${d.WR2_LimitAbs}W (${d.WR2_Temp}°C)`;
+                }
+                else {
+                    document.getElementById('yield-act2').innerText = `???`;
+                }
+                if (d.WR3_Power > 0) {
+                    document.getElementById('yield-act3').innerText = `${d.WR3_Power}W / ${d.WR3_LimitAbs}W (${d.WR3_Temp}°C)`;
+                }
+                else {
+                    document.getElementById('yield-act3').innerText = `???`;
+                }
+                
+                
                 document.getElementById('yield-total').innerText = d.YieldTotal;
                 document.getElementById('progn-day').innerText = d.PrognDay;
                 document.getElementById('progn-remain').innerText = d.PrognDayRemain;
@@ -351,9 +373,14 @@
                 const alarmBanner = document.getElementById('alarm');
                 if (Number(d.ShellyCurrentWatts) > 3500) {
                     alarmBanner.style.display = 'block';
+                    alarmSound.play()
                 } else {
                     alarmBanner.style.display = 'none';
+                    alarmSound.pause(); // Stoppen, wenn Verbrauch wieder sinkt
                 }
+
+
+
 
             } catch (e) {
                 console.error("Verbindungsfehler zum FastAPI-Server:", e);
@@ -379,7 +406,7 @@
         </div>
     </div>-->
     <div id="title2">
-        Photovoltaik-Cockpit für Victron/Hoymiles/Pylontech/OpenDTU/RaspberryPi
+        Photovoltaik-Cockpit für <a href="http://192.168.2.38" target="_blank">Victron-Pylontech</a>/<a href="http://192.168.2.39" target="_blank">Hoymiles-OpenDTU</a>/<a href="http://192.168.2.56/#/" target="_blank">ShellyIn</a>-<a href="http://192.168.2.55/#/" target="_blank">ShellyOut</a>-<a href="http://192.168.2.57/#/" target="_blank">ShellyPro3</a>/RaspberryPi
     </div>
 
     <!-- Alarm-Anzeige (Wird per JS ein-/ausgeblendet) -->
@@ -411,7 +438,32 @@
                     <tr>
                         <td valign="top" width="100">Aktuell:</td>
                         <td valign="top">
-                            <span id="yield-act">{{YieldActW}}</span>
+                            <span id="yield-act">{{YieldActW}}</span> W
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
+                    <tr>
+                        <td valign="top" width="100" style="padding-left: 21px;">Hoy24</td>
+                        <td valign="top">
+                            <span id="yield-act1"></span>
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td valign="top" width="100" style="padding-left: 21px;">Hoy25</td>
+                        <td valign="top">
+                            <span id="yield-act2"></span>
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+                    <tr>
+                        <td valign="top" width="100" style="padding-left: 21px;">Hoy26</td>
+                        <td valign="top">
+                            <span id="yield-act3"></span>
                         </td>
                         <td valign="top">
                         </td>
@@ -420,7 +472,7 @@
                     <tr>
                         <td valign="top" width="100">Gesamt:</td>
                         <td valign="top">
-                            <span id="yield-total">{{YieldTotal}}</span>
+                            <span id="yield-total">{{YieldTotal}}</span> kWh
                         </td>
                         <td valign="top">
                         </td>
@@ -571,7 +623,7 @@
                     </tr>
 
                     <tr>
-                        <td valign="top" width="100"><a href="http://192.168.2.57/#/" target="_blank">ShellyPro3:</a></td>
+                        <td valign="top" width="100">ShellyPro3:</td>
                         <td valign="top">
                             <button class="button" onclick="HoleShellyPro3Status()">3-Kanal-Schalter prüfen</button>
                         </td>
@@ -585,15 +637,6 @@
                         <td valign="top"></td>
                     </tr>
 
-                    <tr>
-                        <td valign="top" width="100"><a href="http://192.168.2.39/" target="_blank">OpenDTU:</a></td>
-                        <td valign="top">
-                            <button class="button" onclick="HoleLimits()">Limits holen</button>
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
                     <tr height="10">
                         <td valign="top"></td>
                         <td valign="top"></td>
@@ -603,7 +646,7 @@
                     <tr>
                         <td valign="top" width="100">Neues Limit:</td>
                         <td valign="top">
-                            <input name="limit" id="limit" value={{ limit }} maxlength="10" style="width: 50px;" />
+                            <input name="limit" id="limit" value=100 maxlength="10" style="width: 50px;" />
                             <button class="button" onclick="SetzeLimit(sGetPara('limit'))">Inverter-Limits einstellen</button>
                         </td>
                         <td valign="top">

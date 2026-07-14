@@ -9,6 +9,9 @@ import random
 
 from aiomqtt import Client as MqttClient
 
+from threading import Lock
+import mysql.connector 
+
 app = FastAPI(title="PV Cockpit Server")
 
 # Jinja2-Template-Verzeichnis definieren
@@ -17,38 +20,104 @@ templates = Jinja2Templates(directory="templates")
 # Binde den Ordner "static" unter dem Pfad "/static" ein
 app.mount("/static", StaticFiles(directory="static"), name="static")
 
-# ==========================================
-# CENTRAL STORAGE: Live-Daten im RAM
-# ==========================================
-PV_LIVE_DATA = {
-    "YieldActW": 0,
-    "YieldTotal": 4512.3,
+# 1. THREAD-SICHERHEIT: Lock initialisieren, falls andere Threads/Endgeräte
+# gleichzeitig auf PV_LIVE_DATA zugreifen und Werte auslesen möchten.
+PV_LIVE_DATA_LOCK = Lock()
 
-    "PrognDay": 18.5,
-    "PrognDayRemain": 5.2,
+# ersetzt im Zusammenhang mit opendtu, s.u.
+# # ==========================================
+# # CENTRAL STORAGE: Live-Daten im RAM
+# # ==========================================
+# PV_LIVE_DATA = {
+#     "YieldActW": 0,
+#     "YieldTotal": 0,
+
+#     "PrognDay": 18.5,
+#     "PrognDayRemain": 5.2,
     
-    "BattSoc": 0,
-    "BattRemainKwh": 0.0,
-    "BattInOutWload": 0,
-    "BattInOutAload": 0.0,
-    "BattInOutWconsum": 0,
-    "BattInOutAconsum": 0.0,
-    "BattV": 0.0,
-    
-    "ConsumAct": 0
-}
+#     "BattSoc": 0,
+#     "BattRemainKwh": 0.0,
+#     "BattInOutWload": 0,
+#     "BattInOutAload": 0.0,
+#     "BattInOutWconsum": 0,
+#     "BattInOutAconsum": 0.0,
+#     "BattV": 0.0,
+
+#     "ShellyTotalKwh": 0,   # Gesamter Verbrauch im Haus in kWh
+#     "ShellyCurrentWatts": 0 # Momentanverbrauch im Haus
+# }
 
 dSpeicherKapa = 10.0 # kWh
+
+# Zentrales Mapping: Definiert Topic und Ziel-Key
+TOPIC_MAPPING = {
+   "solar/ac/yieldtotal": "YieldTotal",
+   "solar/ac/power": "YieldActW",
+   "solar/ac/yieldday": "YieldDay",
+   "solar/ac/is_valid": "IsValid",
+   "solar/dtu/temperature": "DtuTemp",
+        
+   # Wechselrichter 1
+   "solar/116491433653/status/limit_absolute": "WR1_LimitAbs",
+   "solar/116491433653/status/limit_relative": "WR1_LimitRel",
+   "solar/116491433653/status/reachable": "WR1_Reachable",
+   "solar/116491433653/0/power": "WR1_Power",
+   "solar/116491433653/0/yieldday": "WR1_YieldDay",
+   "solar/116491433653/0/yieldtotal": "WR1_YieldTotal",
+   "solar/116491433653/0/temperature": "WR1_Temp",
+
+   # Wechselrichter 2
+   "solar/1164a00cbf56/status/limit_absolute": "WR2_LimitAbs",
+   "solar/1164a00cbf56/status/limit_relative": "WR2_LimitRel",
+   "solar/1164a00cbf56/0/power": "WR2_Power",
+   "solar/1164a00cbf56/0/yieldday": "WR2_YieldDay",
+   "solar/1164a00cbf56/0/yieldtotal": "WR2_YieldTotal",
+   "solar/1164a00cbf56/0/temperature": "WR2_Temp",
+
+   # Wechselrichter 3
+   "solar/116492232746/status/limit_absolute": "WR3_LimitAbs",
+   "solar/116492232746/status/limit_relative": "WR3_LimitRel",
+   "solar/116492232746/0/power": "WR3_Power",
+   "solar/116492232746/0/yieldday": "WR3_YieldDay",
+   "solar/116492232746/0/yieldtotal": "WR3_YieldTotal",
+   "solar/116492232746/0/temperature": "WR3_Temp"
+}
+
+PV_LIVE_DATA = {} # nimmt victron, shelly und opendtu-Werte auf
 
 # ==========================================
 # 1. FUNKTIONSHÜLLEN FÜR DIE DATENBESCHAFFUNG
 # ==========================================
 
 def hole_echte_pv_daten() -> dict:
-    """
-    Fallback-Funktion oder für API-Updates
-    """
-    return PV_LIVE_DATA
+   """
+   Fallback-Funktion oder für API-Updates
+   """
+   with PV_LIVE_DATA_LOCK:
+      return PV_LIVE_DATA
+
+ # ==========================================
+# 2. ROUTE FÜR DAS TABLET (ERSTAUFRUF)
+# ==========================================
+
+@app.get("/", response_class=HTMLResponse)
+async def cockpit_startseite(request: Request):
+    # Geändert auf Ihr neues Template "pv_cockpit.html"
+    #return templates.TemplateResponse("pv_cockpit.html", {"request": request, **PV_LIVE_DATA})
+    return templates.TemplateResponse("limit.html", {"request": request, **PV_LIVE_DATA})
+
+# ==========================================
+# 3. ROUTE FÜR LIVE-UPDATES (POLLING VIA JS)
+# ==========================================
+
+@app.get("/api/pv-daten")
+async def live_daten_api():
+   with PV_LIVE_DATA_LOCK:
+      return PV_LIVE_DATA.copy()
+
+def update_pv_live_data(key, value):
+    with PV_LIVE_DATA_LOCK:
+        PV_LIVE_DATA[key] = value
 
 # ==========================================
 # BACKGROUND-TASK: REZEPTOR FÜR VICTRON MQTT
@@ -95,70 +164,46 @@ async def victron_mqtt_listener():
 
                 async for message in client.messages:
                     topic = str(message.topic)
-                    print(topic)
+                    #print(topic)
                     try:
                         payload_data = json.loads(message.payload.decode())
                         val = payload_data.get("value")
-                        print(val)
+                        #print(val)
+
+                        with PV_LIVE_DATA_LOCK:
                         
-                        if val is not None:
-                            if "Battery/Soc" in topic:
-                                PV_LIVE_DATA["BattSoc"] = int(val)
-                                PV_LIVE_DATA["BattRemainKwh"] = round((float(val) * dSpeicherKapa) / 100, 1)
+                           if val is not None:
+                               if "Battery/Soc" in topic:
+                                   PV_LIVE_DATA["BattSoc"] = int(val)
+                                   PV_LIVE_DATA["BattRemainKwh"] = round((float(val) * dSpeicherKapa) / 100, 1)
                             
-                            # beim Laden haben Watt und Amper positive Vorzeichen
-                            elif "Battery/Power" in topic:
-                               if val > 0.0:
-                                 PV_LIVE_DATA["BattInOutWload"] = int(val)
-                                 PV_LIVE_DATA["BattInOutWconsum"] = 0
-                               else:
-                                 PV_LIVE_DATA["BattInOutWload"] = 0
-                                 PV_LIVE_DATA["BattInOutWconsum"] = int(val)
+                               # beim Laden haben Watt und Amper positive Vorzeichen
+                               elif "Battery/Power" in topic:
+                                  if val > 0.0:
+                                    PV_LIVE_DATA["BattInOutWload"] = int(val)
+                                    PV_LIVE_DATA["BattInOutWconsum"] = 0
+                                  else:
+                                    PV_LIVE_DATA["BattInOutWload"] = 0
+                                    PV_LIVE_DATA["BattInOutWconsum"] = int(val)
 
-                            elif "Battery/Current" in topic:
-                                fVal = float(val)
-                                if fVal > 0.0:
-                                 PV_LIVE_DATA["BattInOutAload"] = round(fVal, 1)
-                                 PV_LIVE_DATA["BattInOutAconsum"] = 0
-                                else:
-                                 PV_LIVE_DATA["BattInOutAload"] = 0
-                                 PV_LIVE_DATA["BattInOutAconsum"] = round(fVal, 1)
+                               elif "Battery/Current" in topic:
+                                   fVal = float(val)
+                                   if fVal > 0.0:
+                                    PV_LIVE_DATA["BattInOutAload"] = round(fVal, 1)
+                                    PV_LIVE_DATA["BattInOutAconsum"] = 0
+                                   else:
+                                    PV_LIVE_DATA["BattInOutAload"] = 0
+                                    PV_LIVE_DATA["BattInOutAconsum"] = round(fVal, 1)
 
-                            elif "Battery/Voltage" in topic:
-                                PV_LIVE_DATA["BattV"] = round(float(val), 1)
+                               elif "Battery/Voltage" in topic:
+                                   PV_LIVE_DATA["BattV"] = round(float(val), 1)
 
-                            elif "Consumption" in topic:
-                                PV_LIVE_DATA["ConsumAct"] = int(val)
-
-                            elif "Dc/Pv/Power" in topic:
-                                PV_LIVE_DATA["YieldActW"] = int(val)
                     except Exception:
                         pass
         except Exception as e:
             await asyncio.sleep(5)
 
-# Startet den MQTT-Listener beim Hochfahren der FastAPI-App
-@app.on_event("startup")
-async def startup_event():
-    asyncio.create_task(victron_mqtt_listener())
 
-# ==========================================
-# 2. ROUTE FÜR DAS TABLET (ERSTAUFRUF)
-# ==========================================
-
-@app.get("/", response_class=HTMLResponse)
-async def cockpit_startseite(request: Request):
-    # Geändert auf Ihr neues Template "pv_cockpit.html"
-    #return templates.TemplateResponse("pv_cockpit.html", {"request": request, **PV_LIVE_DATA})
-    return templates.TemplateResponse("limit.html", {"request": request, **PV_LIVE_DATA})
-
-# ==========================================
-# 3. ROUTE FÜR LIVE-UPDATES (POLLING VIA JS)
-# ==========================================
-
-@app.get("/api/pv-daten")
-async def live_daten_api():
-    return PV_LIVE_DATA
 
 # ==========================================
 # NEU - BACKGROUND-TASK: REZEPTOR FÜR SHELLY MQTT
@@ -181,21 +226,115 @@ async def shelly_mqtt_listener():
                     try:
                         payload_dict = json.loads(message.payload.decode('utf-8'))
                         #print(payload_dict)
-                        if topic.endswith("status/em1data:1") and "total_act_ret_energy" in payload_dict:
-                            PV_LIVE_DATA["ShellyTotalKwh"] = round(payload_dict["total_act_ret_energy"] / 1000.0, 0)
 
-                        elif topic.endswith("status/em1:0") and "act_power" in payload_dict:
-                            PV_LIVE_DATA["ShellyCurrentWatts"] = round(payload_dict["act_power"] * -1.0, 0)
+                        with PV_LIVE_DATA_LOCK:
+
+                           if topic.endswith("status/em1data:1") and "total_act_ret_energy" in payload_dict:
+                               PV_LIVE_DATA["ShellyTotalKwh"] = round(payload_dict["total_act_ret_energy"] / 1000.0, 0)
+
+                           elif topic.endswith("status/em1:0") and "act_power" in payload_dict:
+                               PV_LIVE_DATA["ShellyCurrentWatts"] = round(payload_dict["act_power"] * -1.0, 0)
                     except Exception: pass
         except Exception as e: 
            print(e)
            await asyncio.sleep(5)
 
-# Startet beide MQTT-Listener
+
+
+# ==========================================
+# NEU - BACKGROUND-TASK: REZEPTOR FÜR openDTU MQTT
+# ==========================================
+async def opendtu_mqtt_listener():
+    """Lauscht auf dem lokalen Mosquitto-Broker des Raspberry Pi und fängt die JSON-Pakete de OpenDTU ab."""
+    RASPI_IP = "192.168.2.28"  # IP vom Raspi (Mosquitto)
+    SHELLY_ID = "OpenDTU-12920484"
+
+    while True:
+        try:
+            async with MqttClient(RASPI_IP) as client:
+
+                #await client.subscribe("solar/#")
+                for topic in TOPIC_MAPPING.keys():
+                    await client.subscribe(topic)
+                 
+                async for message in client.messages:
+                    topic = str(message.topic)
+                    try:
+                        payload_dict = json.loads(message.payload.decode('utf-8'))
+                        print(f'openDTU: {topic}: {payload_dict}')
+
+                        key_name = TOPIC_MAPPING[topic]
+                        print(f'openDTU: {key_name}: {topic}: {payload_dict}')
+                            
+                        if isinstance(payload_dict, (int, float)):
+                           processed_value = round(payload_dict, 0)
+                        else:
+                           # Für Booleans (true/false) oder Strings (z.B. "reachable")
+                           processed_value = payload_dict
+                            
+                        # Sicherer Schreibzugriff über das Lock
+                        update_pv_live_data(key_name, processed_value)
+
+                    except Exception: pass
+        except Exception as e: 
+           print(e)
+           await asyncio.sleep(5)
+
+
+
+# ==========================================
+# NEU - BACKGROUND-TASK: PROGNOSE AUS MARIADB HOLEN
+# ==========================================
+async def mariadb_forecast_listener():
+    """Liest regelmäßig die PV-Prognose aus der MariaDB und aktualisiert PV_LIVE_DATA."""
+    while True:
+        try:
+            # Verbindung zur MariaDB aufbauen (Passe User, Passwort & DB-Name an!)
+            conn = mysql.connector.connect(
+                host="localhost",
+                user="master",
+                password="raspi",
+                database="solar2023"
+            )
+            cursor = conn.cursor(dictionary=True)
+            
+            # Dein optimiertes SQL-Query (ohne die Gartenhaus-Einschränkung)
+            query = """
+            SELECT 
+                ROUND(SUM(COALESCE(P1, P3, P6, P12, P24, 0)), 2) AS prognose_gesamt,
+                ROUND(SUM(CASE 
+                    WHEN Stunde >= NOW() THEN COALESCE(P1, P3, P6, P12, P24, 0) 
+                    ELSE 0 
+                END), 2) AS prognose_ab_jetzt
+            FROM t_prognose
+            WHERE DATE(Stunde) = CURDATE();
+            """
+            
+            cursor.execute(query)
+            result = cursor.fetchone()
+            
+            if result:
+                # Werte in den zentralen RAM-Speicher schreiben
+                PV_LIVE_DATA["PrognDay"] = result["prognose_gesamt"] if result["prognose_gesamt"] is not None else 0.0
+                PV_LIVE_DATA["PrognDayRemain"] = result["prognose_ab_jetzt"] if result["prognose_ab_jetzt"] is not None else 0.0
+            
+            cursor.close()
+            conn.close()
+            
+        except Exception as e:
+            print(f"❌ Fehler bei MariaDB-Abfrage: {e}")
+            
+        # Alle 15 Minuten (900 Sekunden) aktualisieren, da sich die Prognose selten ändert
+        await asyncio.sleep(900)
+
+# Startet alle MQTT-Listener
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(victron_mqtt_listener())
     asyncio.create_task(shelly_mqtt_listener())  # NEU
+    asyncio.create_task(opendtu_mqtt_listener())  # NEU
+    asyncio.create_task(mariadb_forecast_listener()) 
+
 
 
 

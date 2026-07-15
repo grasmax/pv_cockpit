@@ -3,9 +3,6 @@
     <title>PV-Cockpit2026</title>
     <link rel="icon" href="favicon.png" type="image/png">
 
-    <!--<script type="text/javascript" src="/static/tacho.js"></script>-->
-    <script type="module" src="{{ url_for('static', path='tacho.js') }}"></script>
-
 
     <style>
         #title_bk {
@@ -442,53 +439,54 @@
 
     </script>
 
-    <script type="module">
-            import {GaugePara} from "{{ url_for('static', path='tacho.js') }}";
+    <script src="{{ url_for('static', path='tacho2026.js') }}"></script>
 
-            function ZeigeTachos() {
+    <script>
+        function ZeigeTachos() {
 
-                var gpSoc = new GaugePara();
-                gpSoc.elmtname = "SOC";
-                gpSoc.title = "Speicher (%)";
-                gpSoc.min = 0;
-                gpSoc.max = 100;
-                gpSoc.redFrom = 0; gpSoc.redTo = 15;
-                gpSoc.yellowFrom = 15; gpSoc.yellowTo = 40;
-                gpSoc.greenFrom = 40; gpSoc.greenTo = 100;
-                gpSoc.akt = 0;
+            var gpSoc = new GaugePara();
+            gpSoc.elmtname = "SOC";
+            gpSoc.title = "Speicher (%)";
+            gpSoc.min = 0;
+            gpSoc.max = 100;
+            gpSoc.redFrom = 0; gpSoc.redTo = 15;
+            gpSoc.yellowFrom = 15; gpSoc.yellowTo = 40;
+            gpSoc.greenFrom = 40; gpSoc.greenTo = 100;
+            gpSoc.akt = 0;
 
-                divStatus = document.getElementById('RvWert')
-                vDrawGaugeText(divStatus, gpSoc, "ModbusTCP-Anfrage läuft...");
+            const divStatus = document.getElementById("RvWert");
+            alert (divStatus);
+            vDrawGaugeText(divStatus, gpSoc, "ModbusTCP-Anfrage läuft...");
 
-                //Asynchrone Versprechen: javascript promise:
-                //  https://www.mediaevent.de/javascript/promise.html
-                //fetch-Fragment übernommen aus https://www.geeksforgeeks.org/ways-to-make-an-api-call-in-javascript/
-                //  Kapitel 2. API Call in JavaScript Using the fetch() method
-                fetch('http://192.168.2.28/soda/modbustcp/')
-                            .then(response => {
-                                if (response.ok) {
-                                    return response.json(); // Parse the response data as JSON
-                                } else {
-                                    throw new Error('Fehler in fetch(http://192.168.2.28/soda/dbus/)');
-                                }
-                            })
-                            .then(data => {
-                                if (data.Fehler != "") {
-                                    console.error(data.Fehler);
-                                    document.getElementById('RvWert').innerHTML = data.Fehler;
-                                    vDrawGaugeText( divStatus, gpSoc, "Anfrage abgebrochen.");
-                                }
-                                else {
-                                    gpSoc.akt = data.SOC;
-                                    vDrawGauge(gpSoc);
-                                    //               ZeigeErtragsUndPrognoseWerte(data);
-                                }
-                            })
-                            .catch(error => {
-                                console.error(error);
-                                divStatus.innerHTML = error;
-                            });
-            }
+            //Asynchrone Versprechen: javascript promise:
+            //  https://www.mediaevent.de/javascript/promise.html
+            //fetch-Fragment übernommen aus https://www.geeksforgeeks.org/ways-to-make-an-api-call-in-javascript/
+            //  Kapitel 2. API Call in JavaScript Using the fetch() method
+            fetch('http://192.168.2.28/soda/modbustcp/')
+                .then(response => {
+                    if (response.ok) {
+                        return response.json(); // Parse the response data as JSON
+                    } else {
+                        throw new Error('Fehler in fetch(http://192.168.2.28/soda/dbus/)');
+                    }
+                })
+                .then(data => {
+                    if (data.Fehler != "") {
+                        console.error(data.Fehler);
+                        document.getElementById('RvWert').innerHTML = data.Fehler;
+                        vDrawGaugeText(divStatus, gpSoc, "Anfrage abgebrochen.");
+                    }
+                    else {
+                        gpSoc.akt = data.SOC;
+                        vDrawGauge(gpSoc);
+                        //               ZeigeErtragsUndPrognoseWerte(data);
+                    }
+                })
+                .catch(error => {
+                    console.error(error);
+                    divStatus.innerHTML = error;
+                });
+        }
         ZeigeTachos();
         window.setInterval(ZeigeTachos, 60000);
     </script>

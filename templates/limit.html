@@ -1,6 +1,6 @@
 <html>
 <head>
-    <title>Inverter-Limits setzen</title>
+    <title>PV-Cockpit2026</title>
     <link rel="icon" href="favicon.png" type="image/png">
 
     <style>
@@ -63,6 +63,8 @@
             width: 240px;
             height: 200px;
             word-wrap: break-word;
+            /* ERGÄNZUNG: Erlaubt Zeilenumbrüche durch \n im gesamten Element */ 
+            white-space: pre-line;
         }
 
         .divider {
@@ -113,67 +115,79 @@
 
         }
 
-        function SetzeLimitIntern(Limit) {
-            try {
+        function updateStatus(element, typ, text) {
+            // Falls das Element (aus welchen Gründen auch immer) nicht existiert, brechen wir ab
+            if (!element) return;
 
-                sReq = "http://192.168.2.28/soda/setlimits/" + Limit;
+            // 1. Text setzen (funktioniert dank div und pre-line perfekt mit \n)
+            element.innerText = text;
 
-                
-                fetch(sReq)
-                    .then(response => {
-                        if (response.ok) {
-                            return response.json(); // Parse the response data as JSON
-                        } else {
-                            throw new Error('Fehler in fetch(' + sReq + ')');
-                        }
-                    })
-                    .then(data => {
-                        if (data.rv != "okok") {
-                            console.error(data.text);
-                            errTitle = document.getElementById('RvText');
-                            errTitle.innerText = "Fehler:";
-                            errTitle.style.color = 'red';
-                            errText = document.getElementById('RvWert');
-                            errText.innerHTML = data.text;
-                            errText.style.color = 'red';
-                        }
-                        else {
-                            rvWert = document.getElementById('RvWert');
-                            rvWert.value = data.text;
-                            var myTimer = setInterval(Scroll(), 500);
-                        }
-                    })
-                    .catch(error => {
-                        console.error(error);
-                        errTitle = document.getElementById('RvText');
-                        errTitle.innerText = "Ausnahme:";
-                        errTitle.style.color = 'red';
-                        errText = document.getElementById('RvWert');
-                        errText.innerHTML = error;
-                        errText.style.color = 'red';
-                    });
-
-            }
-            catch (e2) {
-                console.error(e2);
-                document.getElementById('RvText').innerText = "Ausnahme2:";
-                document.getElementById('RvWert').innerHTML = e2;
+            // 2. Farbe je nach Typ (Erfolg oder Fehler) anpassen
+            if (typ === 'error') {
+                element.style.color = "red";
+            } else if (typ === 'success') {
+                element.style.color = "rgb(85,255,85)"; // Deine grüne Originalfarbe aus dem CSS
+            } else {
+                element.style.color = ""; // Standardfarbe (falls du mal einen neutralen Typ brauchst)
             }
         }
 
+
+        function SetzeLimitIntern(wattValue) {
+            const statusField = document.getElementById("RvWert");
+            updateStatus(statusField, 'success', `Sende Limit ${wattValue}W...`);
+
+            //testen, ob der Text zu sehen ist
+            //setTimeout(() => {
+
+                fetch('/api/opendtu/set-limit', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ limit: wattValue })
+                })
+                    .then(response => {
+                        // Falls der Server komplett abstürzt (z.B. Uvicorn weg), greift das weiterhin
+                        if (!response.ok) {
+                            updateStatus(statusField, 'error', `Limit nicht gesetzt!\nFehler HTTP ${response.status}`);
+                            // 2. Wir geben ein leeres Objekt mit einem Abbruch-Flag an den nächsten Block weiter
+                            return { _abgebrochen: true };                    }
+                        return response.json();
+                    })
+
+                    .then(data => {
+                        // Falls oben der Fehler zugeschlagen hat, beenden wir die Funktion JETZT sofort geräuschlos
+                        if (data._abgebrochen) return;
+
+                        // Hier werten wir deine neue Struktur direkt aus
+                        if (data.status === 'success') {
+                            updateStatus(statusField, 'success', `Limit erfolgreich gesetzt:\n ${wattValue} W pro Wechselrichter`);
+
+                        } else if (data.status === 'err') {
+                            // Zeigt exakt deinen Text aus dem Backend an ("irgendwas lief schief")
+                            updateStatus(statusField, 'error', `Limit nicht gesetzt!\nFehler vom Server: ${data.text}`);
+                        } else {
+                            updateStatus(statusField, 'error', `Limit nicht gesetzt!\nUnbekannter Status vom Server.`);
+                        }
+                    })
+                    .catch(err => {
+                        sErr = `Limit nicht gesetzt!\nFehler: ${err.message}. Server nicht gestartet oder beendet oder Netzwerkfehler.`;
+                        console.error('Netzwerkfehler:', sErr);
+                        updateStatus(statusField, 'error', sErr);
+                    });
+            //}, 1500); // <-- Zeit in Millisekunden (1500 ms = 1,5 Sekunden)
+        }
+
         function SetzeLimit(Limit) {
+            const statusField = document.getElementById("RvWert"); // Falls deine ID anders heißt, bitte anpassen
             try {
                 //fkt nicht: document.body.style.cursor = 'progress';
-                //fkt. leider nur beim ersten Mal: 
-                document.getElementById('RvWert').innerHTML = "Warte...";
-                
                 SetzeLimitIntern(Limit)
                 //fkt nicht: document.body.style.cursor = "default";
             }
             catch (e) {
                 console.error(e);
-                document.getElementById('RvText').innerText = "Ausnahme3:";
-                document.getElementById('RvWert').innerHTML = e;
+                console.error('Fehler:', e);
+                if (statusField) statusField.innerText = `Limit nicht gesetzt!\nFehler: ${e}`;
             }
         }
 
@@ -302,25 +316,47 @@
 
         function Text2ClipBoard() {
             var copyText = document.getElementById("RvWert");
-            copyText.select();
-            //nötig für Mobiltelefone? copyText.setSelectionRange(0, 99999); 
+            if (!copyText) return;
 
-            //Juni 2024:writeText funktioniert nicht, execCommand ist deprecated, aber alternativlos
-            //navigator.clipboard.writeText(copyText.value);
+            const textToCopy = copyText.innerText;
+
+            // 1. Eine temporäre, unsichtbare Textarea im Hintergrund erstellen
+            const tempTextArea = document.createElement("textarea");
+            tempTextArea.value = textToCopy;
+
+            // Verhindert, dass die Seite springt oder das Element sichtbar wird
+            tempTextArea.style.position = "fixed";
+            tempTextArea.style.top = "-9999px";
+            tempTextArea.style.left = "-9999px";
+
+            document.body.appendChild(tempTextArea);
+
+            // 2. Den Text in der unsichtbaren Textarea markieren und kopieren
+            tempTextArea.focus();
+            tempTextArea.select();
+            tempTextArea.setSelectionRange(0, 99999); // Wichtig für ältere Mobiltelefone
+
+            // Über den execCommand kopieren (funktioniert immer auf HTTP-Seiten)
             document.execCommand("copy");
 
-            //keine Möglichkeit gefunden, die Selektion wieder zu löschen
-            btn = document.getElementById("btnProgn");
-            btn.focus();
-            //copyText.focus();
+            // 3. Die temporäre Textarea sofort wieder rückstandslos löschen
+            document.body.removeChild(tempTextArea);
+
+            // 4. Fokus wie gewünscht verschieben (löscht auch automatisch jede Selektion)
+            var btn = document.getElementById("btnProgn");
+            if (btn) btn.focus();
         }
 
         function DeleteSel() {
             var copyText = document.getElementById("RvWert");
+            if (!copyText) return;
 
-            copyText.select();
-            document.execCommand("delete");
+            // Nutzt Ihre bestehende Funktion, um den Inhalt zu leeren 
+            // und die rote Fehlerfarbe komplett zurückzusetzen
+            updateStatus(copyText, 'success', "");
         }
+
+
 
         const alarmSound = new Audio('/static/Stromfresseralarm.m4a');
         
@@ -671,7 +707,8 @@
                             <div id="RvText"></div>
                         </td>
                         <td valign="top">
-                            <textarea name="RvWert" id="RvWert" type="text" rows="20" cols="70"></textarea>
+                            <!--<textarea name="RvWert" id="RvWert" type="text" rows="20" cols="70"></textarea>-->
+                            <div id="RvWert" name="RvWert"></div>
                         </td>
                         <td valign="top">
                             <button id="btnCopy" onclick="Text2ClipBoard()">

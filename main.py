@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, Response 
 from fastapi.responses import HTMLResponse
 from fastapi.templating import Jinja2Templates
 from fastapi.staticfiles import StaticFiles
@@ -11,6 +11,8 @@ from aiomqtt import Client as MqttClient
 
 from threading import Lock
 import mysql.connector 
+
+from pydantic import BaseModel
 
 app = FastAPI(title="PV Cockpit Server")
 
@@ -261,10 +263,10 @@ async def opendtu_mqtt_listener():
                     topic = str(message.topic)
                     try:
                         payload_dict = json.loads(message.payload.decode('utf-8'))
-                        print(f'openDTU: {topic}: {payload_dict}')
+                        #print(f'openDTU: {topic}: {payload_dict}')
 
                         key_name = TOPIC_MAPPING[topic]
-                        print(f'openDTU: {key_name}: {topic}: {payload_dict}')
+                        #print(f'openDTU: {key_name}: {topic}: {payload_dict}')
                             
                         if isinstance(payload_dict, (int, float)):
                            processed_value = round(payload_dict, 0)
@@ -339,17 +341,72 @@ async def startup_event():
 
 
 # ==========================================
-# 4. FUNKTIONSHÜLLEN FÜR DIE BUTTON-AKTIONEN
+# 4. DIE BUTTON-AKTIONEN
 # ==========================================
+
+MQTT_BROKER = "192.168.2.28"  # Deine Broker-IP
+MQTT_PORT = 1883
+INVERTERS = ["116491433653", "1164a00cbf56", "116492232746"]
+MAX_TOTAL_LIMIT = 2000 
+
+# Pydantic-Modell für die Datenvalidierung
+class LimitRequest(BaseModel):
+    limit: int
+
+async def send_mqtt_limit(limit_per_inverter: float):
+    """Baut eine asynchrone Verbindung auf und sendet die Limits an alle Inverter."""
+    async with MqttClient(MQTT_BROKER, port=MQTT_PORT) as client:
+        tasks = []
+        for inverter in INVERTERS:
+            #topic = f"solar/set/{inverter}/limit_absolute"
+            #topic = f"solar/set/{inverter}/cmd/limit_persistent_absolute"
+            topic = f"solar/{inverter}/cmd/limit_persistent_absolute"
+            
+            payload = str(int(limit_per_inverter))
+            print(f"Sende per aiomqtt: {topic} -> {payload}W")
+            # Füge das Veröffentlichen der Taskliste hinzu
+            tasks.append(client.publish(topic, payload=payload, qos=1))
+        
+        # Sende alle MQTT-Befehle parallel ab
+        await asyncio.gather(*tasks)
+
+@app.post("/api/opendtu/set-limit")
+async def set_limit(request_data: LimitRequest):
+    try:
+        #Nur für den Test der Fehlerbehandlung:
+        # raise HTTPException(status_code=500, detail="Künstlicher MQTT-Verbindungsfehler im Test")
+        # Statt raise HTTPException geben wir nun deine Struktur zurück
+        # return {
+        #     "status": "err2", 
+        #     "text": f"Fehler bei der Verarbeitung: {str(request_data.limit)}W", 
+        # }
+
+        # TEST-ZEILE: Erzwinge sofort einen nackten HTTP 403 Fehler
+        # return Response(status_code=403)
+
+        total_limit = request_data.limit
+        
+        # Sicherheits-Check: Begrenzung auf das Maximum deiner Wechselrichter
+        if total_limit > MAX_TOTAL_LIMIT:
+            total_limit = MAX_TOTAL_LIMIT
+        if total_limit < 0:
+            total_limit = 0
+
+        await send_mqtt_limit(total_limit)
+            
+        return {
+            "status": "success", 
+            "total_limit": total_limit, 
+        }
+
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+
 
 @app.post("/api/shelly/pruefen")
 async def pruefe_shelly():
     return {"log": "Programmende shelly_check.py:\nShellyPro3 erfolgreich erreicht."}
 
-@app.get("/api/opendtu/limits")
-async def hole_opendtu_limits():
-    return {"log": "Programmende opendtu_fetch.py:\nLimits ausgelesen."}
 
-@app.post("/api/opendtu/set-limit")
-async def setze_opendtu_limit(watt: int):
-    return {"log": f"Programmende opendtu/opendtuhoylimit.py:\nLimit {watt} W gesendet."}

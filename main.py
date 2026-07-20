@@ -14,6 +14,12 @@ import mysql.connector
 
 from pydantic import BaseModel
 
+import sys
+sys.path.insert(1, '/mnt/wd2tb/script/shellypro3')
+from sp3 import HoleShellyStatus123
+
+import time
+
 app = FastAPI(title="PV Cockpit Server")
 
 # Jinja2-Template-Verzeichnis definieren
@@ -52,6 +58,8 @@ PV_LIVE_DATA_LOCK = Lock()
 dSpeicherKapa = 10.0 # kWh
 
 # Zentrales Mapping: Definiert Topic und Ziel-Key
+TOPIC_LAST_SEEN = {}
+TIMEOUT_MINUTES = 5  # Nach wie vielen Minuten gelöscht werden soll
 TOPIC_MAPPING = {
    "solar/ac/yieldtotal": "YieldTotal",
    "solar/ac/power": "YieldActW",
@@ -173,32 +181,42 @@ async def victron_mqtt_listener():
                         #print(val)
 
                         with PV_LIVE_DATA_LOCK:
-                        
+                           tNow = time.time()
                            if val is not None:
                                if "Battery/Soc" in topic:
                                    PV_LIVE_DATA["BattSoc"] = int(val)
-                                   PV_LIVE_DATA["BattRemainKwh"] = round((float(val) * dSpeicherKapa) / 100, 1)
+                                   TOPIC_LAST_SEEN["BattSoc"] = tNow
                             
                                # beim Laden haben Watt und Amper positive Vorzeichen
                                elif "Battery/Power" in topic:
                                   if val > 0.0:
                                     PV_LIVE_DATA["BattInOutWload"] = int(val)
                                     PV_LIVE_DATA["BattInOutWconsum"] = 0
+                                    TOPIC_LAST_SEEN["BattInOutWload"] = tNow
+                                    TOPIC_LAST_SEEN["BattInOutWconsum"] = tNow
                                   else:
                                     PV_LIVE_DATA["BattInOutWload"] = 0
-                                    PV_LIVE_DATA["BattInOutWconsum"] = int(val)
+                                    PV_LIVE_DATA["BattInOutWconsum"] = int(val) * -1.0
+                                    TOPIC_LAST_SEEN["BattInOutWload"] = tNow
+                                    TOPIC_LAST_SEEN["BattInOutWconsum"] = tNow
+
 
                                elif "Battery/Current" in topic:
                                    fVal = float(val)
                                    if fVal > 0.0:
                                     PV_LIVE_DATA["BattInOutAload"] = round(fVal, 1)
                                     PV_LIVE_DATA["BattInOutAconsum"] = 0
+                                    TOPIC_LAST_SEEN["BattInOutAload"] = tNow
+                                    TOPIC_LAST_SEEN["BattInOutAconsum"] = tNow
                                    else:
                                     PV_LIVE_DATA["BattInOutAload"] = 0
                                     PV_LIVE_DATA["BattInOutAconsum"] = round(fVal, 1)
+                                    TOPIC_LAST_SEEN["BattInOutAload"] = tNow
+                                    TOPIC_LAST_SEEN["BattInOutAconsum"] = tNow
 
                                elif "Battery/Voltage" in topic:
                                    PV_LIVE_DATA["BattV"] = round(float(val), 1)
+                                   TOPIC_LAST_SEEN["BattV"] = tNow
 
                     except Exception:
                         pass
@@ -232,9 +250,11 @@ async def shelly_mqtt_listener():
                         with PV_LIVE_DATA_LOCK:
 
                            if topic.endswith("status/em1data:1") and "total_act_ret_energy" in payload_dict:
+                               TOPIC_LAST_SEEN["ShellyTotalKwh"] = time.time()
                                PV_LIVE_DATA["ShellyTotalKwh"] = round(payload_dict["total_act_ret_energy"] / 1000.0, 0)
 
                            elif topic.endswith("status/em1:0") and "act_power" in payload_dict:
+                               TOPIC_LAST_SEEN["ShellyCurrentWatts"] = time.time()
                                PV_LIVE_DATA["ShellyCurrentWatts"] = round(payload_dict["act_power"] * -1.0, 0)
                     except Exception: pass
         except Exception as e: 
@@ -246,6 +266,32 @@ async def shelly_mqtt_listener():
 # ==========================================
 # NEU - BACKGROUND-TASK: REZEPTOR FÜR openDTU MQTT
 # ==========================================
+async def check_timeouts():
+    """Prüft fortlaufend, ob Daten veraltet sind und löscht sie."""
+    while True:
+        try:
+            current_time = time.time()
+            # Kopie der Keys erstellen, um Fehler beim Ändern während der Iteration zu vermeiden
+            for topic in list(TOPIC_LAST_SEEN.keys()):
+                last_seen = TOPIC_LAST_SEEN[topic]
+
+                if current_time - last_seen > (TIMEOUT_MINUTES * 60):
+                    key_name = TOPIC_MAPPING[topic]
+
+                    # Wert löschen oder auf None/0 setzen
+                    # Ersetze dies durch deine Löschfunktion (z. B. mit deinem Lock)
+                    update_pv_live_data(key_name, None)
+
+                    # Aus dem Zeitstempel-Tracker entfernen
+                    del TOPIC_LAST_SEEN[topic]
+                    print(f"Timeout: {key_name} wegen Inaktivität gelöscht.")
+
+        except Exception as e:
+            print(f"Fehler im Timeout-Task: {e}")
+
+        # Alle 10 Sekunden prüfen
+        await asyncio.sleep(10)
+        
 async def opendtu_mqtt_listener():
     """Lauscht auf dem lokalen Mosquitto-Broker des Raspberry Pi und fängt die JSON-Pakete de OpenDTU ab."""
     RASPI_IP = "192.168.2.28"  # IP vom Raspi (Mosquitto)
@@ -273,7 +319,10 @@ async def opendtu_mqtt_listener():
                         else:
                            # Für Booleans (true/false) oder Strings (z.B. "reachable")
                            processed_value = payload_dict
-                            
+                        
+                        # Zeitstempel der Aktualisierung speichern
+                        TOPIC_LAST_SEEN[topic] = time.time()
+
                         # Sicherer Schreibzugriff über das Lock
                         update_pv_live_data(key_name, processed_value)
 
@@ -300,31 +349,82 @@ async def mariadb_forecast_listener():
             )
             cursor = conn.cursor(dictionary=True)
             
-            # Dein optimiertes SQL-Query (ohne die Gartenhaus-Einschränkung)
             query = """
             SELECT 
-                ROUND(SUM(COALESCE(P1, P3, P6, P12, P24, 0)), 2) AS prognose_gesamt,
                 ROUND(SUM(CASE 
-                    WHEN Stunde >= NOW() THEN COALESCE(P1, P3, P6, P12, P24, 0) 
+                    WHEN DATE(Stunde) = CURDATE() THEN COALESCE(P1, P3, P6, P12, P24, 0) 
                     ELSE 0 
-                END), 2) AS prognose_ab_jetzt
+                END), 2) AS heute_gesamt,
+
+                ROUND(SUM(CASE 
+                    WHEN DATE(Stunde) = CURDATE() AND Stunde >= NOW() THEN COALESCE(P1, P3, P6, P12, P24, 0) 
+                    ELSE 0 
+                END), 2) AS heute_ab_jetzt,
+
+                ROUND(SUM(CASE 
+                    WHEN DATE(Stunde) = CURDATE() + INTERVAL 1 DAY THEN COALESCE(P1, P3, P6, P12, P24, 0) 
+                    ELSE 0 
+                END), 2) AS morgen_gesamt
             FROM t_prognose
-            WHERE DATE(Stunde) = CURDATE();
+            WHERE Feldname = "Gartenhaus" and DATE(Stunde) IN (CURDATE(), CURDATE() + INTERVAL 1 DAY);            
             """
             
             cursor.execute(query)
             result = cursor.fetchone()
+
+            query2 = """
+            SELECT 
+                ROUND(SUM(CASE 
+                    WHEN DATE(Stunde) = CURDATE() THEN COALESCE(P1, P3, P6, P12, P24, 0) 
+                    ELSE 0 
+                END), 2) AS heute_gesamt_sp,
+
+                ROUND(SUM(CASE 
+                    WHEN DATE(Stunde) = CURDATE() AND Stunde >= NOW() THEN COALESCE(P1, P3, P6, P12, P24, 0) 
+                    ELSE 0 
+                END), 2) AS heute_ab_jetzt_sp,
+
+                ROUND(SUM(CASE 
+                    WHEN DATE(Stunde) = CURDATE() + INTERVAL 1 DAY THEN COALESCE(P1, P3, P6, P12, P24, 0) 
+                    ELSE 0 
+                END), 2) AS morgen_gesamt_sp
+            FROM t_prognose
+            WHERE Feldname = "Solarport" and DATE(Stunde) IN (CURDATE(), CURDATE() + INTERVAL 1 DAY);            
+            """
             
+            cursor.execute(query2)
+            result2 = cursor.fetchone()
+
+            heute_gesamt_gh = heute_rest_gh  =  morgen_gesamt_gh = 0.0
+            heute_gesamt_sp = heute_rest_sp  =  morgen_gesamt_sp = 0.0
+
             if result:
-                # Werte in den zentralen RAM-Speicher schreiben
-                PV_LIVE_DATA["PrognDay"] = result["prognose_gesamt"] if result["prognose_gesamt"] is not None else 0.0
-                PV_LIVE_DATA["PrognDayRemain"] = result["prognose_ab_jetzt"] if result["prognose_ab_jetzt"] is not None else 0.0
+               heute_gesamt_gh = result["heute_gesamt"] if result["heute_gesamt"] is not None else 0.0
+               heute_rest_gh  = result["heute_ab_jetzt"] if result["heute_ab_jetzt"] is not None else 0.0
+               morgen_gesamt_gh = result["morgen_gesamt"] if result["morgen_gesamt"] is not None else 0.0
             
+            if result2:
+               heute_gesamt_sp = result2["heute_gesamt_sp"] if result2["heute_gesamt_sp"] is not None else 0.0
+               heute_rest_sp  = result2["heute_ab_jetzt_sp"] if result2["heute_ab_jetzt_sp"] is not None else 0.0
+               morgen_gesamt_sp = result2["morgen_gesamt_sp"] if result2["morgen_gesamt_sp"] is not None else 0.0
+            
+            # Solarport am Haus nur mit 50% annehmen           wegen Beschattung ab Mittag
+            #                                                                        |  
+            PV_LIVE_DATA["PrognDay"] = round(heute_gesamt_gh + heute_gesamt_sp           / 2.0 , 1)
+            PV_LIVE_DATA["PrognDayRemain"] = round(heute_rest_gh + heute_rest_sp         / 2.0 ,1)
+            PV_LIVE_DATA["PrognDayTomorrow"] = round(morgen_gesamt_gh + morgen_gesamt_sp / 2.0,1)
+            
+            # Zeitstempel der Aktualisierung speichern
+            TOPIC_LAST_SEEN["PrognDay"] = time.time()
+            TOPIC_LAST_SEEN["PrognDayRemain"] = time.time()
+            TOPIC_LAST_SEEN["PrognDayTomorrow"] = time.time()
+
+
             cursor.close()
             conn.close()
             
         except Exception as e:
-            print(f"❌ Fehler bei MariaDB-Abfrage: {e}")
+            print(f"Fehler bei MariaDB-Abfrage: {e}")
             
         # Alle 15 Minuten (900 Sekunden) aktualisieren, da sich die Prognose selten ändert
         await asyncio.sleep(900)
@@ -333,11 +433,11 @@ async def mariadb_forecast_listener():
 @app.on_event("startup")
 async def startup_event():
     asyncio.create_task(victron_mqtt_listener())
-    asyncio.create_task(shelly_mqtt_listener())  # NEU
-    asyncio.create_task(opendtu_mqtt_listener())  # NEU
+    asyncio.create_task(shelly_mqtt_listener())  
+    asyncio.create_task(opendtu_mqtt_listener()) 
+    asyncio.create_task(check_timeouts()) 
     asyncio.create_task(mariadb_forecast_listener()) 
-
-
+ 
 
 
 # ==========================================
@@ -407,6 +507,37 @@ async def set_limit(request_data: LimitRequest):
 
 @app.post("/api/shelly/pruefen")
 async def pruefe_shelly():
-    return {"log": "Programmende shelly_check.py:\nShellyPro3 erfolgreich erreicht."}
+   try:
+      jrv = {
+         "rv": "",
+         "text": "",
+      }      
+
+      sStat = HoleShellyStatus123()
+      if len(sStat) <= 0:
+         jrv["rv"] = "err"
+         jrv["text"] = "??"
+         print(f'Fehler in opendtuhoylimit.HoleShellyPro3Status(): ??')
+
+      elif sStat[:4] == "Ausn":
+         jrv["rv"] = "exc"
+         jrv["text"] = sStat
+         print(sStat)
+         print(f'Ausnahme in opendtuhoylimit.HoleShellyPro3Status(): {sStat}')
+
+      else:
+         jrv["rv"] = "okok"
+         jrv["text"] = sStat
+         print( sStat)         
+
+      return jrv
+   
+   except Exception as e:
+       jrv = {
+          "rv": "exc",
+          "text": f'Ausnahme in HoleShellyPro3Status(): {e}',
+       }      
+       print(jrv["text"])
+       return jrv
 
 

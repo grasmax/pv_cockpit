@@ -4,7 +4,7 @@
 
 //var grasmax_gauge = {
 
-export class GaugePara {
+class GaugePara {
     constructor() {
         this.elmtname = "";
         this.title = "";
@@ -51,7 +51,7 @@ function vDrawArc(context, cr, radius, OffsetY, min, max, from, to) {
     }
 }
 
-export function vDrawGauge(p){
+function vDrawGauge(p){
     try {
 
         elmt = p.elmtname;
@@ -147,9 +147,8 @@ export function vDrawGauge(p){
     }
 }
 
-export function vDrawGaugeText(divStatus, p, sText) {
+function vDrawGaugeText(divStatus, p, sText) {
     try {
-        alert("asdsadwwwww");
         elmt = p.elmtname;
 
         var canvas = document.getElementById(elmt);
@@ -171,6 +170,6 @@ export function vDrawGaugeText(divStatus, p, sText) {
     }
 }
 
-
-
+//unklar. ob das gebraucht wird:
+//window.GaugePara = GaugePara;
 //};

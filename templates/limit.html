@@ -96,6 +96,17 @@
             border-radius: 4px;
             width: 600px;
         }
+        .warn-banner {
+            background-color: yellow;
+            color: black;
+            text-align: left;
+            padding: 10px;
+            font-size: 12pt;
+            font-family: Calibri;
+            font-weight: bold;
+            border-radius: 4px;
+            width: 600px;
+        }
     </style>
 
     <script type="text/javascript">
@@ -183,7 +194,7 @@
                     console.error('Netzwerkfehler:', sErr);
                     updateStatus(statusField, 'error', sErr);
                 });
-            //}, 1500); // <-- Zeit in Millisekunden (1500 ms = 1,5 Sekunden)
+            //} , 1500); // Ende des setTimeout-Blocks <-- Zeit in Millisekunden (1500 ms = 1,5 Sekunden)
         }
 
         function SetzeLimit(Limit) {
@@ -248,52 +259,6 @@
             }
         }
 
-        function HoleShellyPro3StatusIntern() {
-            try {
-
-                sReq = "http://192.168.2.28/soda/HoleShellyPro3Status";
-
-                fetch(sReq)
-                    .then(response => {
-                        if (response.ok) {
-                            return response.json(); // Parse the response data as JSON
-                        } else {
-                            throw new Error('Fehler in fetch(' + sReq + ')');
-                        }
-                    })
-                    .then(data => {
-                        if (data.rv != "okok") {
-                            console.error(data.text);
-                            errTitle = document.getElementById('RvText');
-                            errTitle.innerText = "Fehler:";
-                            errTitle.style.color = 'red';
-                            errText = document.getElementById('RvWert');
-                            errText.innerHTML = data.text;
-                            errText.style.color = 'red';
-                        }
-                        else {
-                            rvWert = document.getElementById('RvWert');
-                            rvWert.value = data.text;
-                            var myTimer = setInterval(Scroll(), 500);
-                        }
-                    })
-                    .catch(error => {
-                        console.error(error);
-                        errTitle = document.getElementById('RvText');
-                        errTitle.innerText = "Ausnahme:";
-                        errTitle.style.color = 'red';
-                        errText = document.getElementById('RvWert');
-                        errText.innerHTML = error;
-                        errText.style.color = 'red';
-                    });
-
-            }
-            catch (e2) {
-                console.error(e2);
-                document.getElementById('RvText').innerText = "Ausnahme2:";
-                document.getElementById('RvWert').innerHTML = e2;
-            }
-        }
 
 
 
@@ -310,18 +275,6 @@
             }
         }
 
-        function HoleShellyPro3Status() {
-            try {
-                document.getElementById('RvWert').innerHTML = "Warte auf Daten vom ShellyPro3...";
-
-                HoleShellyPro3StatusIntern()
-            }
-            catch (e) {
-                console.error(e);
-                document.getElementById('RvText').innerText = "Ausnahme4:";
-                document.getElementById('RvWert').innerHTML = e;
-            }
-        }
 
         function Text2ClipBoard() {
             var copyText = document.getElementById("RvWert");
@@ -369,8 +322,25 @@
 
         const alarmSound = new Audio('/static/Stromfresseralarm.m4a');
 
+        nSoc = 0;
+        nRestImSpeicher = 0;
+        nRestPrognoseHeute = 0;
+        nPrognoseMorgen = 0;
+
         async function aktualisiereDaten() {
             try {
+
+                const jetzt = new Date();
+                const formatierungsOptionen = {
+                    day: '2-digit',
+                    month: '2-digit',
+                    year: '2-digit',
+                    hour: '2-digit',
+                    minute: '2-digit'
+                };
+                const formatiertesDatum = jetzt.toLocaleDateString('de-DE', formatierungsOptionen);
+                //console.log(formatiertesDatum); // Ausgabe z. B.: 17.07.26
+
                 const response = await fetch('/api/pv-daten');
                 const d = await response.json();
 
@@ -400,10 +370,16 @@
                 document.getElementById('yield-total').innerText = d.YieldTotal;
                 document.getElementById('progn-day').innerText = d.PrognDay;
                 document.getElementById('progn-remain').innerText = d.PrognDayRemain;
+                document.getElementById('progn-tomorrow').innerText = d.PrognDayTomorrow;
+                
+                nSoc = d.BattSoc; // der tatsächliche Speicherfüllstand in %
+                nRestImSpeicher = (nSoc - 20.0) * 10.0 / 100.0 ; //100% == 10kWh aber nur bis minimal 20% entladen 
+                nRestPrognoseHeute = d.PrognDayRemain;
+                nPrognoseMorgen = d.PrognDayTomorrow;
+                document.getElementById('AngebotSpeicher').innerText = `${nRestImSpeicher}` ;
+                document.getElementById('AngebotRestPrognose').innerText = `${nRestPrognoseHeute}`;
+                document.getElementById('AngebotPrognoseMorgen').innerText = `${nPrognoseMorgen}`;
 
-                // KORRIGIERT: 'batt-soc' statt 'node-soc'
-                document.getElementById('batt-soc').innerText = d.BattSoc;
-                document.getElementById('batt-remain').innerText = d.BattRemainKwh;
 
                 document.getElementById('batt-inout-w-load').innerText = d.BattInOutWload;
                 document.getElementById('batt-inout-a-load').innerText = d.BattInOutAload;
@@ -424,6 +400,15 @@
                     alarmSound.pause(); // Stoppen, wenn Verbrauch wieder sinkt
                 }
 
+                // Limit-Alarm, wenn mehr als 1000W aus dem Speicher entnommen werden
+                const warnBanner = document.getElementById('warnung');
+                if (Number(d.BattInOutWconsum) > 10) {
+                    warnBanner.style.display = 'block';
+                    alarmSound.play()
+                } else {
+                    warnBanner.style.display = 'none';
+                    alarmSound.pause(); // Stoppen, wenn Verbrauch wieder sinkt
+                }
 
 
 
@@ -431,17 +416,67 @@
                 console.error("Verbindungsfehler zum FastAPI-Server:", e);
             }
         }
-        // Startet die Aktualisierung sofort beim Laden
-        aktualisiereDaten();
 
-        // AKTIVIERT: Wiederholt die Abfrage alle 3 Sekunden
-        setInterval(aktualisiereDaten, 3000);
+        document.addEventListener("DOMContentLoaded", function () {
+            // Startet die Aktualisierung sofort beim Laden
+            aktualisiereDaten();
+
+            // AKTIVIERT: Wiederholt die Abfrage alle 3 Sekunden
+            setInterval(aktualisiereDaten, 3000);
+        });
+
+
+
+        function HoleShellyPro3Status() {
+            const statusField = document.getElementById("RvWert");
+            updateStatus(statusField, 'success', `Hole Statuswerte...`);
+
+            wattValue = 0
+            //testen, ob der Text zu sehen ist
+            setTimeout(() => {
+
+            fetch('/api/shelly/pruefen', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ limit: wattValue })
+            })
+                .then(response => {
+                    // Falls der Server komplett abstürzt (z.B. Uvicorn weg), greift das weiterhin
+                    if (!response.ok) {
+                        updateStatus(statusField, 'error', `Limit nicht gesetzt!\nFehler HTTP ${response.status}`);
+                        // 2. Wir geben ein leeres Objekt mit einem Abbruch-Flag an den nächsten Block weiter
+                        return { _abgebrochen: true };
+                    }
+                    return response.json();
+                })
+
+                .then(data => {
+                    // Falls oben der Fehler zugeschlagen hat, beenden wir die Funktion JETZT sofort geräuschlos
+                    if (data._abgebrochen) return;
+
+                    // Hier werten wir deine neue Struktur direkt aus
+                    if (data.rv === 'okok') {
+                        updateStatus(statusField, 'success', data.text);
+
+                    } else if (data.status === 'err' || data.status === 'exc') {
+                        updateStatus(statusField, 'error', data.text);
+                    } else {
+                        updateStatus(statusField, 'error', `Unbekannter Fehler`);
+                    }
+                })
+                .catch(err => {
+                    sErr = `Limit nicht gesetzt!\nFehler: ${err.message}. Server nicht gestartet oder beendet oder Netzwerkfehler.`;
+                    console.error('Netzwerkfehler:', sErr);
+                    updateStatus(statusField, 'error', sErr);
+                });
+            } , 200); // Ende des setTimeout-Blocks <-- Zeit in Millisekunden (1500 ms = 1,5 Sekunden)
+        }
 
     </script>
 
     <script src="{{ url_for('static', path='tacho2026.js') }}"></script>
 
-    <script>
+    <script type="text/javascript">
         function ZeigeTachos() {
 
             var gpSoc = new GaugePara();
@@ -449,46 +484,23 @@
             gpSoc.title = "Speicher (%)";
             gpSoc.min = 0;
             gpSoc.max = 100;
-            gpSoc.redFrom = 0; gpSoc.redTo = 15;
-            gpSoc.yellowFrom = 15; gpSoc.yellowTo = 40;
+            gpSoc.redFrom = 0; gpSoc.redTo = 20;
+            gpSoc.yellowFrom = 20; gpSoc.yellowTo = 40;
             gpSoc.greenFrom = 40; gpSoc.greenTo = 100;
             gpSoc.akt = 0;
 
             const divStatus = document.getElementById("RvWert");
-            alert (divStatus);
-            vDrawGaugeText(divStatus, gpSoc, "ModbusTCP-Anfrage läuft...");
 
-            //Asynchrone Versprechen: javascript promise:
-            //  https://www.mediaevent.de/javascript/promise.html
-            //fetch-Fragment übernommen aus https://www.geeksforgeeks.org/ways-to-make-an-api-call-in-javascript/
-            //  Kapitel 2. API Call in JavaScript Using the fetch() method
-            fetch('http://192.168.2.28/soda/modbustcp/')
-                .then(response => {
-                    if (response.ok) {
-                        return response.json(); // Parse the response data as JSON
-                    } else {
-                        throw new Error('Fehler in fetch(http://192.168.2.28/soda/dbus/)');
-                    }
-                })
-                .then(data => {
-                    if (data.Fehler != "") {
-                        console.error(data.Fehler);
-                        document.getElementById('RvWert').innerHTML = data.Fehler;
-                        vDrawGaugeText(divStatus, gpSoc, "Anfrage abgebrochen.");
-                    }
-                    else {
-                        gpSoc.akt = data.SOC;
-                        vDrawGauge(gpSoc);
-                        //               ZeigeErtragsUndPrognoseWerte(data);
-                    }
-                })
-                .catch(error => {
-                    console.error(error);
-                    divStatus.innerHTML = error;
-                });
+            gpSoc.akt = nSoc;
+            vDrawGauge(gpSoc);
         }
-        ZeigeTachos();
-        window.setInterval(ZeigeTachos, 60000);
+
+
+        document.addEventListener("DOMContentLoaded", function () {
+            ZeigeTachos();
+            window.setInterval(ZeigeTachos, 5000);
+        });
+
     </script>
 
 
@@ -511,6 +523,10 @@
         ALARM! Verbrauch zu hoch!
     </div>
 
+    <!-- Alarm-Anzeige (Wird per JS ein-/ausgeblendet) -->
+    <div id="warnung" class="warn-banner">
+        Warnung! Hohe Speicherentnahme! Limit zu niedrig?
+    </div>
 
     <table>
 
@@ -528,6 +544,9 @@
                             <canvas id="SOC" width="130" height="130"></canvas>
                         </td>
                         <td valign="top">
+                            Speicher: <span id="AngebotSpeicher">{{nRestImSpeicher}}</span> kWh<br />
+                            Prognose: <span id="AngebotRestPrognose">{{nRestPrognoseHeute}}</span> kWh<br />
+                            morgen:  <span id="AngebotPrognoseMorgen">{{nPrognoseMorgen}}</span> kWh
                         </td>
                         <td valign="top">
                         </td>
@@ -617,6 +636,15 @@
                         </td>
                     </tr>
 
+                    <tr>
+                        <td valign="top" width="100">Morgen, gesamt:</td>
+                        <td valign="top">
+                            <span id="progn-tomorrow">{{PrognDayTomorrow}}</span> kWh
+                        </td>
+                        <td valign="top">
+                        </td>
+                    </tr>
+
 
                     <tr height="10">
                         <td valign="top"></td>
@@ -634,14 +662,6 @@
                         </td>
                     </tr>
 
-                    <tr>
-                        <td valign="top" width="100">SOC:</td>
-                        <td valign="top">
-                            <span id="batt-soc">{{BattSoc}}</span> % / <span id="batt-remain">{{BattRemainKwh}}</span> kWh
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
 
                     <tr>
                         <td valign="top" width="100">Laden:</td>

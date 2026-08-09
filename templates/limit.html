@@ -401,8 +401,12 @@
                 }
 
                 // Limit-Alarm, wenn mehr als 1000W aus dem Speicher entnommen werden
+                //$$ es fehlt
+                //$$ - eine Betrachtung der Limits und
+                //$$ - der Prognose:
+                const aktuelleStunde = jetzt.getHours();
                 const warnBanner = document.getElementById('warnung');
-                if (Number(d.BattInOutWconsum) > 10) {
+                if (Number(d.BattInOutWconsum) > 2000 && (9 < aktuelleStunde && aktuelleStunde < 17)) {
                     warnBanner.style.display = 'block';
                     alarmSound.play()
                 } else {

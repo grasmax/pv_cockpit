@@ -2,7 +2,8 @@
 <head>
     <title>PV-Cockpit2026</title>
     <link rel="icon" href="favicon.png" type="image/png">
-
+    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
 
     <style>
         #title_bk {
@@ -19,11 +20,19 @@
 
         #title2 {
             color: #5690bb;
-            padding: 5px;
             text-align: left;
             font-size: 12pt;
             font-family: Calibri;
             font-weight: bold;
+            /*            width: 500px;
+        */
+        }
+        #title3 {
+            color: #5690bb;
+            margin-left: 5px;
+            text-align: left;
+            font-size: 12pt;
+            font-family: Calibri;
             /*            width: 500px;
         */
         }
@@ -503,6 +512,18 @@
         document.addEventListener("DOMContentLoaded", function () {
             ZeigeTachos();
             window.setInterval(ZeigeTachos, 5000);
+
+            //Die Eigenschaft style.zoom wird nicht von allen Browsern gleichermaßen standardisiert unterstützt
+            // Ermittelt die verfügbare Breite im CSS-Pixel-System des Smartphones
+            // const displayBreite = window.innerWidth;
+
+            // Beispiel: Wenn Sie eine feste Basisbreite von 400px für Ihr Cockpit erwarten
+            // const basisBreite = 400;
+            // const zoomFaktor = displayBreite / basisBreite;
+
+            // Setzt den Zoom-Faktor direkt auf die Seite an
+            // document.body.style.zoom = zoomFaktor;
+
         });
 
     </script>
@@ -519,7 +540,13 @@
         </div>
     </div>-->
     <div id="title2">
-        Photovoltaik-Cockpit für <a href="http://192.168.2.38" target="_blank">Victron-Pylontech</a>/<a href="http://192.168.2.39" target="_blank">Hoymiles-OpenDTU</a>/<a href="http://192.168.2.56/#/" target="_blank">ShellyIn</a>-<a href="http://192.168.2.55/#/" target="_blank">ShellyOut</a>-<a href="http://192.168.2.57/#/" target="_blank">ShellyPro3</a>/RaspberryPi
+        Photovoltaik-Cockpit
+    </div>
+    <div id="title3">
+        <a href="http://192.168.2.38" target="_blank">Victron-Pylontech</a> / <a href="http://192.168.2.39" target="_blank">Hoymiles-OpenDTU</a>
+    </div>
+    <div id="title3">
+        <a href="http://192.168.2.56/#/" target="_blank">ShellyIn</a> / <a href="http://192.168.2.55/#/" target="_blank">ShellyOut</a> / <a href="http://192.168.2.57/#/" target="_blank">ShellyPro3</a> / RaspberryPi
     </div>
 
     <!-- Alarm-Anzeige (Wird per JS ein-/ausgeblendet) -->
@@ -533,291 +560,247 @@
     </div>
 
     <table>
+        <tr height="10">
+            <td valign="top"></td>
+            <td valign="top"></td>
+            <td valign="top"></td>
+        </tr>
 
-        <tr height="500">
-            <td valign="top">
-                <table width="300">
-                    <tr height="10">
-                        <td valign="top"></td>
-                        <td valign="top"></td>
-                        <td valign="top"></td>
-                    </tr>
-
-                    <tr>
-                        <td class="thema" valign="top" width="150">
-                            <canvas id="SOC" width="130" height="130"></canvas>
-                        </td>
-                        <td valign="top">
-                            Speicher: <span id="AngebotSpeicher">{{nRestImSpeicher}}</span> kWh<br />
-                            Prognose: <span id="AngebotRestPrognose">{{nRestPrognoseHeute}}</span> kWh<br />
-                            morgen:  <span id="AngebotPrognoseMorgen">{{nPrognoseMorgen}}</span> kWh
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <td class="thema" valign="top" width="150">Sonne</td>
-                        <td valign="top">
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <td valign="top" width="100">Aktuell:</td>
-                        <td valign="top">
-                            <span id="yield-act">{{YieldActW}}</span> W
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <td valign="top" width="100" style="padding-left: 21px;">Hoy24</td>
-                        <td valign="top">
-                            <span id="yield-act1"></span>
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-                    <tr>
-                        <td valign="top" width="100" style="padding-left: 21px;">Hoy25</td>
-                        <td valign="top">
-                            <span id="yield-act2"></span>
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-                    <tr>
-                        <td valign="top" width="100" style="padding-left: 21px;">Hoy26</td>
-                        <td valign="top">
-                            <span id="yield-act3"></span>
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <td valign="top" width="100">Gesamt:</td>
-                        <td valign="top">
-                            <span id="yield-total">{{YieldTotal}}</span> kWh
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-
-                    <tr height="10">
-                        <td valign="top"></td>
-                        <td valign="top"></td>
-                        <td valign="top"></td>
-                    </tr>
-
-                    <tr>
-                        <td class="thema" valign="top" width="100">Prognose</td>
-                        <td valign="top">
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <td valign="top" width="100">Heute, gesamt:</td>
-                        <td valign="top">
-                            <span id="progn-day">{{PrognDay}}</span> kWh
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <td valign="top" width="100">Heute, ab jetzt:</td>
-                        <td valign="top">
-                            <span id="progn-remain">{{PrognDayRemain}}</span> kWh
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <td valign="top" width="100">Morgen, gesamt:</td>
-                        <td valign="top">
-                            <span id="progn-tomorrow">{{PrognDayTomorrow}}</span> kWh
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-
-                    <tr height="10">
-                        <td valign="top"></td>
-                        <td valign="top"></td>
-                        <td valign="top"></td>
-                    </tr>
-
-
-
-                    <tr>
-                        <td class="thema" valign="top" width="100">Speicher</td>
-                        <td valign="top">
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-
-                    <tr>
-                        <td valign="top" width="100">Laden:</td>
-                        <td valign="top">
-                            <span id="batt-inout-w-load">{{BattInOutWload}}</span> W / <span id="batt-inout-a-load">{{BattInOutAload}}</span> A
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <td valign="top" width="100">Verbrauchen:</td>
-                        <td valign="top">
-                            <span id="batt-inout-w-consum">{{BattInOutWconsum}}</span> W / <span id="batt-inout-a-consum">{{BattInOutAconsum}}</span> A
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <td valign="top" width="100">Spannung:</td>
-                        <td valign="top">
-                            <span id="batt-v">{{BattV}}</span> V
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-
-                    <tr height="10">
-                        <td valign="top"></td>
-                        <td valign="top"></td>
-                        <td valign="top"></td>
-                    </tr>
-
-
-                    <tr>
-                        <td class="thema" valign="top" width="100">Verbrauch im Haus </td>
-                        <td valign="top">
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <td valign="top" width="100">Aktuell:</td>
-                        <td valign="top">
-                            <span id="consum-act">{{ShellyCurrentWatts}}</span> W
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <td valign="top" width="100">Gesamt: </td>
-                        <td valign="top">
-                            <span id="consum-total">{{ShellyTotalKwh}}</span> kWh
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-                    <tr height="10">
-                        <td valign="top"></td>
-                        <td valign="top"></td>
-                        <td valign="top"></td>
-                    </tr>
-
-
-                </table>
+        <tr>
+            <td class="thema" valign="top" width="150">
+                <canvas id="SOC" width="130" height="130"></canvas>
             </td>
-
             <td valign="top">
-                <!-- VERTIKALE TRENNLINIE -->
-                <div class="divider"></div>
-
+                <br />
+                Speicher: <span id="AngebotSpeicher">{{nRestImSpeicher}}</span> kWh<br />
+                Prognose: <span id="AngebotRestPrognose">{{nRestPrognoseHeute}}</span> kWh<br />
+                morgen:  <span id="AngebotPrognoseMorgen">{{nPrognoseMorgen}}</span> kWh
             </td>
-
             <td valign="top">
-                <table>
-                    <tr height="10">
-                        <td valign="top"></td>
-                        <td valign="top"></td>
-                        <td valign="top"></td>
-                    </tr>
-
-                    <tr>
-                        <td valign="top" width="100">ShellyPro3:</td>
-                        <td valign="top">
-                            <button class="button" onclick="HoleShellyPro3Status()">3-Kanal-Schalter prüfen</button>
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-                    <tr height="10">
-                        <td valign="top"></td>
-                        <td valign="top"></td>
-                        <td valign="top"></td>
-                    </tr>
-
-                    <tr height="10">
-                        <td valign="top"></td>
-                        <td valign="top"></td>
-                        <td valign="top"></td>
-                    </tr>
-
-                    <tr>
-                        <td valign="top" width="100">Neues Limit:</td>
-                        <td valign="top">
-                            <input name="limit" id="limit" value=100 maxlength="10" style="width: 50px;" />
-                            <button class="button" onclick="SetzeLimit(sGetPara('limit'))">Inverter-Limits einstellen</button>
-                        </td>
-                        <td valign="top">
-                        </td>
-                    </tr>
-
-                    <tr>
-                        <td valign="top"></td>
-                        <td valign="top">
-                            <button id="btnLimit" onclick="SetzeLimit(300)">300 W</button>
-                            <button id="btnLimit" onclick="SetzeLimit(400)">400 W</button>
-                            <button id="btnLimit" onclick="SetzeLimit(600)">600 W</button><br />
-                            <button id="btnLimit" onclick="SetzeLimit(800)">800 W</button>
-                            <button id="btnLimit" onclick="SetzeLimit(1000)">1000 W</button>
-                            <button id="btnLimit" onclick="SetzeLimit(1400)">1400 W</button>
-                        </td>
-                        <td valign="top"></td>
-                    </tr>
-
-                    <tr>
-                        <td valign="top">
-                            <div id="RvText"></div>
-                        </td>
-                        <td valign="top">
-                            <!--<textarea name="RvWert" id="RvWert" type="text" rows="20" cols="70"></textarea>-->
-                            <div id="RvWert" name="RvWert"></div>
-                        </td>
-                        <td valign="top">
-                            <button id="btnCopy" onclick="Text2ClipBoard()">
-                                <img src="{{ url_for('static', path='copy_icon.jpg') }}">
-                            </button>
-                            <br />
-                            <button id="btnDelete" onclick="DeleteSel()">
-                                <img src="{{ url_for('static', path='del_icon.jpg') }}">
-                            </button>
-                        </td>
-                    </tr>
-                </table>
-
             </td>
         </tr>
+
+        <tr>
+            <td colspan="2" class="thema" valign="top" width="100">Verbrauch im Haus</td>
+        </tr>
+
+        <tr>
+            <td valign="top" width="100">Aktuell:</td>
+            <td valign="top">
+                <span id="consum-act">{{ShellyCurrentWatts}}</span> W
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+
+        <tr>
+            <td valign="top" width="100">Gesamt: </td>
+            <td valign="top">
+                <span id="consum-total">{{ShellyTotalKwh}}</span> kWh
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+
+
+        <tr>
+            <td class="thema" valign="top" width="150">Sonne</td>
+            <td valign="top">
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+
+        <tr>
+            <td valign="top" width="100">Aktuell:</td>
+            <td valign="top">
+                <span id="yield-act">{{YieldActW}}</span> W
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+
+        <tr>
+            <td valign="top" width="100" style="padding-left: 21px;">Hoy24</td>
+            <td valign="top">
+                <span id="yield-act1"></span>
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+        <tr>
+            <td valign="top" width="100" style="padding-left: 21px;">Hoy25</td>
+            <td valign="top">
+                <span id="yield-act2"></span>
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+        <tr>
+            <td valign="top" width="100" style="padding-left: 21px;">Hoy26</td>
+            <td valign="top">
+                <span id="yield-act3"></span>
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+
+        <tr>
+            <td valign="top" width="100">Gesamt:</td>
+            <td valign="top">
+                <span id="yield-total">{{YieldTotal}}</span> kWh
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+
+        <tr>
+            <td class="thema" valign="top" width="100">Prognose</td>
+            <td valign="top">
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+
+        <tr>
+            <td valign="top" width="100">Heute, gesamt:</td>
+            <td valign="top">
+                <span id="progn-day">{{PrognDay}}</span> kWh
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+
+        <tr>
+            <td valign="top" width="100">Heute, ab jetzt:</td>
+            <td valign="top">
+                <span id="progn-remain">{{PrognDayRemain}}</span> kWh
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+
+        <tr>
+            <td valign="top" width="100">Morgen, gesamt:</td>
+            <td valign="top">
+                <span id="progn-tomorrow">{{PrognDayTomorrow}}</span> kWh
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+
+
+        <!--<tr height="10">
+        <td valign="top"></td>
+        <td valign="top"></td>
+        <td valign="top"></td>
+    </tr>-->
+
+
+        <tr>
+            <td class="thema" valign="top" width="100">Speicher</td>
+            <td valign="top">
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+
+
+        <tr>
+            <td valign="top" width="100">Laden:</td>
+            <td valign="top">
+                <span id="batt-inout-w-load">{{BattInOutWload}}</span> W / <span id="batt-inout-a-load">{{BattInOutAload}}</span> A
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+
+        <tr>
+            <td valign="top" width="100">Verbrauchen:</td>
+            <td valign="top">
+                <span id="batt-inout-w-consum">{{BattInOutWconsum}}</span> W / <span id="batt-inout-a-consum">{{BattInOutAconsum}}</span> A
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+
+        <tr>
+            <td valign="top" width="100">Spannung:</td>
+            <td valign="top">
+                <span id="batt-v">{{BattV}}</span> V
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+
+
+
+
+        <tr height="10">
+            <td valign="top"></td>
+            <td valign="top"></td>
+            <td valign="top"></td>
+        </tr>
+
+
+        <tr>
+            <td valign="top" width="100">Neues Limit:</td>
+            <td valign="top">
+                <input name="limit" id="limit" value=100 maxlength="10" style="width: 50px;" />
+                <button class="button" onclick="SetzeLimit(sGetPara('limit'))">Inverter-Limits einstellen</button>
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+
+        <tr>
+            <td valign="top"></td>
+            <td valign="top">
+                <button id="btnLimit" onclick="SetzeLimit(300)">300 W</button>
+                <button id="btnLimit" onclick="SetzeLimit(400)">400 W</button>
+                <button id="btnLimit" onclick="SetzeLimit(600)">600 W</button><br />
+                <button id="btnLimit" onclick="SetzeLimit(800)">800 W</button>
+                <button id="btnLimit" onclick="SetzeLimit(1000)">1000 W</button>
+                <button id="btnLimit" onclick="SetzeLimit(1400)">1400 W</button>
+            </td>
+            <td valign="top"></td>
+        </tr>
+
+        <tr>
+            <td valign="top">
+                <div id="RvText"></div>
+            </td>
+            <td valign="top">
+                <!--<textarea name="RvWert" id="RvWert" type="text" rows="20" cols="70"></textarea>-->
+                <div id="RvWert" name="RvWert"></div>
+            </td>
+            <td valign="top">
+                <button id="btnCopy" onclick="Text2ClipBoard()">
+                    <img src="{{ url_for('static', path='copy_icon.jpg') }}">
+                </button>
+                <br />
+                <button id="btnDelete" onclick="DeleteSel()">
+                    <img src="{{ url_for('static', path='del_icon.jpg') }}">
+                </button>
+            </td>
+        </tr>
+
+
+        <tr height="10">
+            <td valign="top"></td>
+            <td valign="top"></td>
+            <td valign="top"></td>
+        </tr>
+
+        <tr>
+            <td valign="top" width="100">ShellyPro3:</td>
+            <td valign="top">
+                <button class="button" onclick="HoleShellyPro3Status()">3-Kanal-Schalter prüfen</button>
+            </td>
+            <td valign="top">
+            </td>
+        </tr>
+
 
     </table>
 

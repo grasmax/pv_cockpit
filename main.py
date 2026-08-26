@@ -135,7 +135,8 @@ def update_pv_live_data(key, value):
 async def victron_mqtt_listener():
     CERBO_IP = "192.168.2.38"  # Ihre reale Cerbo-IP laut Skript
     VRM_ID = "48e7da866373" # "216643"          # Ihre VRM-ID
-    
+    BATT_ID = "512" 
+
     # Erweitertes Keep-Alive: Sagt dem Cerbo GX aktiv, dass wir Daten wollen
     async def send_keep_alive(client):
         # Beim ersten Start alle gewünschten IDs aktiv einmalig anfordern (Read-Befehl 'R/')
@@ -144,7 +145,12 @@ async def victron_mqtt_listener():
             f"R/{VRM_ID}/system/0/Dc/Battery/Power",
             f"R/{VRM_ID}/system/0/Dc/Battery/Voltage",
             f"R/{VRM_ID}/system/0/Ac/Consumption/L1/Power",
-            f"R/{VRM_ID}/system/0/Dc/Pv/Power"
+            f"R/{VRM_ID}/system/0/Dc/Pv/Power",
+
+            f"R/{VRM_ID}/battery/{BATT_ID}/System/MinCellVoltage",
+            f"R/{VRM_ID}/battery/{BATT_ID}/System/MaxCellVoltage",
+            f"R/{VRM_ID}/battery/{BATT_ID}/System/MinCellTemperature",
+            f"R/{VRM_ID}/battery/{BATT_ID}/System/MaxCellTemperature"
         ]
         for t in themen:
             try:
@@ -169,6 +175,12 @@ async def victron_mqtt_listener():
                 await client.subscribe(f"N/{VRM_ID}/system/0/Dc/Battery/Current")
                 await client.subscribe(f"N/{VRM_ID}/system/0/Ac/Consumption/L1/Power")
                 await client.subscribe(f"N/{VRM_ID}/system/0/Dc/Pv/Power")
+
+
+                await client.subscribe(f"N/{VRM_ID}/battery/{BATT_ID}/System/MinCellVoltage")
+                await client.subscribe(f"N/{VRM_ID}/battery/{BATT_ID}/System/MaxCellVoltage")
+                await client.subscribe(f"N/{VRM_ID}/battery/{BATT_ID}/System/MinCellTemperature")
+                await client.subscribe(f"N/{VRM_ID}/battery/{BATT_ID}/System/MaxCellTemperature")
                 
                 asyncio.create_task(send_keep_alive(client))
 
@@ -218,6 +230,24 @@ async def victron_mqtt_listener():
                                    PV_LIVE_DATA["BattV"] = round(float(val), 1)
                                    TOPIC_LAST_SEEN["BattV"] = tNow
 
+
+                               elif "MinCellVoltage" in topic:
+                                   PV_LIVE_DATA["BattMinV"] = round(float(val), 3)
+                                   TOPIC_LAST_SEEN["BattMinV"] = tNow
+
+                               elif "MaxCellVoltage" in topic:
+                                   PV_LIVE_DATA["BattMaxV"] = round(float(val), 3)
+                                   TOPIC_LAST_SEEN["BattMaxV"] = tNow
+
+                               elif "MinCellTemperature" in topic:
+                                   PV_LIVE_DATA["BattMinTemp"] = round(float(val), 1)
+                                   TOPIC_LAST_SEEN["BattMinTemp"] = tNow
+
+                               elif "MaxCellTemperature" in topic:
+                                   PV_LIVE_DATA["BattMaxTemp"] = round(float(val), 1)
+                                   TOPIC_LAST_SEEN["BattMaxTemp"] = tNow
+
+
                     except Exception:
                         pass
         except Exception as e:
@@ -231,7 +261,8 @@ async def victron_mqtt_listener():
 async def shelly_mqtt_listener():
     """Lauscht auf dem lokalen Mosquitto-Broker des Raspberry Pi und fängt die JSON-Pakete des Shelly Pro EM 50 ab."""
     RASPI_IP = "192.168.2.28"  # IP vom Raspi (Mosquitto)
-    SHELLY_ID = "shellyproem50-08f9e0e85934"
+    SHELLY_ID = "shellyproem50-08f9e0e85934" # ProEM-MPIIout
+    # SHELLY_ID = "shellyproem50-08f9e0e4716c" # ProEM-MPIIin
 
     while True:
         try:
@@ -249,13 +280,13 @@ async def shelly_mqtt_listener():
 
                         with PV_LIVE_DATA_LOCK:
 
-                           if topic.endswith("status/em1data:1") and "total_act_ret_energy" in payload_dict:
+                           if topic.endswith("status/em1data:1") and "total_act_energy" in payload_dict:
                                TOPIC_LAST_SEEN["ShellyTotalKwh"] = time.time()
-                               PV_LIVE_DATA["ShellyTotalKwh"] = round(payload_dict["total_act_ret_energy"] / 1000.0, 0)
+                               PV_LIVE_DATA["ShellyTotalKwh"] = round(payload_dict["total_act_energy"] / 1000.0, 0)
 
-                           elif topic.endswith("status/em1:0") and "act_power" in payload_dict:
+                           elif topic.endswith("status/em1:1") and "act_power" in payload_dict:
                                TOPIC_LAST_SEEN["ShellyCurrentWatts"] = time.time()
-                               PV_LIVE_DATA["ShellyCurrentWatts"] = round(payload_dict["act_power"] * -1.0, 0)
+                               PV_LIVE_DATA["ShellyCurrentWatts"] = round(payload_dict["act_power"] , 0)
                     except Exception: pass
         except Exception as e: 
            print(e)
@@ -371,6 +402,7 @@ async def mariadb_forecast_listener():
             
             cursor.execute(query)
             result = cursor.fetchone()
+            print(f'Gartenhaus: {result}')
 
             query2 = """
             SELECT 
@@ -394,6 +426,7 @@ async def mariadb_forecast_listener():
             
             cursor.execute(query2)
             result2 = cursor.fetchone()
+            print(f'Solarport: {result2}')
 
             heute_gesamt_gh = heute_rest_gh  =  morgen_gesamt_gh = 0.0
             heute_gesamt_sp = heute_rest_sp  =  morgen_gesamt_sp = 0.0
